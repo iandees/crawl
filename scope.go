@@ -57,6 +57,9 @@ func (m URLPrefixMap) Add(uri *url.URL) {
 
 func (m URLPrefixMap) Contains(uri *url.URL) bool {
 	s := strings.TrimPrefix(uri.Host, "www.")
+	if _, ok := m[s]; ok {
+		return true
+	}
 	for _, p := range strings.Split(uri.Path, "/") {
 		if p == "" {
 			continue
