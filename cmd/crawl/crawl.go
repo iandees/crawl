@@ -124,7 +124,11 @@ func main() {
 	}
 
 	seeds := crawl.MustParseURLs(flag.Args())
-	scope := crawl.NewSeedScope(seeds, *depth, strings.Split(*validSchemes, ","))
+	scope := []crawl.Scope{
+		crawl.NewSchemeScope(strings.Split(*validSchemes, ",")),
+		crawl.NewDepthScope(*depth),
+		crawl.NewSeedScope(seeds),
+	}
 
 	w := warc.NewWriter(outf)
 	defer w.Close()

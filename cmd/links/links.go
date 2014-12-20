@@ -38,7 +38,11 @@ func main() {
 	flag.Parse()
 
 	seeds := crawl.MustParseURLs(flag.Args())
-	scope := crawl.NewSeedScope(seeds, *depth, strings.Split(*validSchemes, ","))
+	scope := []crawl.Scope{
+		crawl.NewSchemeScope(strings.Split(*validSchemes, ",")),
+		crawl.NewDepthScope(*depth),
+		crawl.NewSeedScope(seeds),
+	}
 
 	crawler, err := crawl.NewCrawler("crawldb", seeds, scope, crawl.FetcherFunc(http.Get), crawl.HandlerFunc(extractLinks))
 	if err != nil {

@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"strings"
 	"sync"
 	"time"
 
@@ -58,10 +57,6 @@ type URLInfo struct {
 	Error      error
 }
 
-type Scope interface {
-	Check(*url.URL, int) bool
-}
-
 type Fetcher interface {
 	Fetch(string) (*http.Response, error)
 }
@@ -86,7 +81,7 @@ func (f HandlerFunc) Handle(db *Crawler, u string, depth int, resp *http.Respons
 type Crawler struct {
 	db      *gobDB
 	seeds   []*url.URL
-	scope   Scope
+	scopes  []Scope
 	fetcher Fetcher
 	handler Handler
 
@@ -111,9 +106,11 @@ func (c *Crawler) Enqueue(u *url.URL, depth int) {
 	// Normalize the URL.
 	urlStr := purell.NormalizeURL(u, purell.FlagsSafe|purell.FlagRemoveDotSegments|purell.FlagRemoveDuplicateSlashes|purell.FlagRemoveFragment|purell.FlagRemoveDirectoryIndex|purell.FlagSortQuery)
 
-	// See if it's in scope.
-	if !c.scope.Check(u, depth) {
-		return
+	// See if it's in scope. Checks are ANDed.
+	for _, sc := range c.scopes {
+		if !sc.Check(u, depth) {
+			return
+		}
 	}
 
 	c.enqueueMx.Lock()
@@ -202,46 +199,6 @@ func (c *Crawler) urlHandler(queue <-chan QueuePair) {
 	}
 }
 
-type seedScope struct {
-	seeds    []*url.URL
-	schemes  map[string]struct{}
-	maxDepth int
-}
-
-func (s *seedScope) Check(u *url.URL, depth int) bool {
-	// Ignore non-allowed schemes.
-	if _, ok := s.schemes[u.Scheme]; !ok {
-		return false
-	}
-
-	// Do not crawl beyond maxDepth.
-	if depth > s.maxDepth {
-		return false
-	}
-
-	// Check each seed prefix.
-	for _, seed := range s.seeds {
-		if u.Host == seed.Host && strings.HasPrefix(u.Path, seed.Path) {
-			return true
-		}
-	}
-	return false
-}
-
-// NewSeedScope returns a Scope that will only allow crawling the seed
-// domains, and not beyond the specified maximum link depth.
-func NewSeedScope(seeds []*url.URL, maxDepth int, allowedSchemes []string) Scope {
-	scope := &seedScope{
-		seeds:    seeds,
-		maxDepth: maxDepth,
-		schemes:  make(map[string]struct{}),
-	}
-	for _, s := range allowedSchemes {
-		scope.schemes[s] = struct{}{}
-	}
-	return scope
-}
-
 func MustParseURLs(urls []string) []*url.URL {
 	// Parse the seed URLs.
 	var parsed []*url.URL
@@ -256,7 +213,7 @@ func MustParseURLs(urls []string) []*url.URL {
 }
 
 // NewCrawler creates a new Crawler object with the specified behavior.
-func NewCrawler(path string, seeds []*url.URL, scope Scope, f Fetcher, h Handler) (*Crawler, error) {
+func NewCrawler(path string, seeds []*url.URL, scopes []Scope, f Fetcher, h Handler) (*Crawler, error) {
 	// Open the crawl database.
 	db, err := newGobDB(path)
 	if err != nil {
@@ -267,7 +224,7 @@ func NewCrawler(path string, seeds []*url.URL, scope Scope, f Fetcher, h Handler
 		fetcher: f,
 		handler: &standardPageHandler{h},
 		seeds:   seeds,
-		scope:   scope,
+		scopes:  scopes,
 	}
 	return c, nil
 }
@@ -320,8 +277,6 @@ func (wrap *standardPageHandler) Handle(c *Crawler, u string, depth int, resp *h
 		}
 	}
 	info.Error = err
-
-	//log.Printf("[CRAWL] %+v", info)
 
 	c.UpdateURL(info)
 	return nil
