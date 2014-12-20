@@ -10,15 +10,13 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 
 	"git.autistici.org/ale/crawl"
+	"git.autistici.org/ale/crawl/analysis"
 	"git.autistici.org/ale/crawl/warc"
-	"github.com/PuerkitoBio/goquery"
 )
 
 var (
@@ -27,53 +25,15 @@ var (
 	depth        = flag.Int("depth", 10, "maximum link depth")
 	validSchemes = flag.String("schemes", "http,https", "comma-separated list of allowed protocols")
 	outputFile   = flag.String("output", "crawl.warc.gz", "output WARC file")
-
-	urlcssRx = regexp.MustCompile(`background.*:.*url\(["']?([^'"\)]+)["']?\)`)
 )
 
-var linkMatches = []struct {
-	tag  string
-	attr string
-}{
-	{"a", "href"},
-	{"link", "href"},
-	{"img", "src"},
-	{"script", "src"},
-}
-
 func extractLinks(c *crawl.Crawler, u string, depth int, resp *http.Response, err error) error {
-	var outlinks []string
-
-	ctype := resp.Header.Get("Content-Type")
-	if strings.HasPrefix(ctype, "text/html") {
-		doc, err := goquery.NewDocumentFromResponse(resp)
-		if err != nil {
-			return err
-		}
-
-		for _, lm := range linkMatches {
-			doc.Find(fmt.Sprintf("%s[%s]", lm.tag, lm.attr)).Each(func(i int, s *goquery.Selection) {
-				val, _ := s.Attr(lm.attr)
-				outlinks = append(outlinks, val)
-			})
-		}
-	} else if strings.HasPrefix(ctype, "text/css") {
-		if data, err := ioutil.ReadAll(resp.Body); err == nil {
-			for _, val := range urlcssRx.FindAllStringSubmatch(string(data), -1) {
-				outlinks = append(outlinks, val[1])
-			}
-		}
+	links, err := analysis.GetLinks(resp)
+	if err != nil {
+		return err
 	}
 
-	// Uniquify and parse outbound links.
-	links := make(map[string]*url.URL)
-	for _, val := range outlinks {
-		if linkurl, err := resp.Request.URL.Parse(val); err == nil {
-			links[linkurl.String()] = linkurl
-		}
-	}
 	for _, link := range links {
-		//log.Printf("%s -> %s", u, link.String())
 		c.Enqueue(link, depth+1)
 	}
 
