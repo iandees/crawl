@@ -272,8 +272,9 @@ func NewCrawler(path string, seeds []*url.URL, scope Scope, f Fetcher, h Handler
 	return c, nil
 }
 
-// Run the crawl, does not exit until it is done.
-func (c *Crawler) Run() {
+// Run the crawl with the specified number of workers. This function
+// does not exit until all work is done (no URLs left in the queue).
+func (c *Crawler) Run(concurrency int) {
 	// Load initial seeds into the queue.
 	for _, u := range c.seeds {
 		c.Enqueue(u, 0)
@@ -282,7 +283,7 @@ func (c *Crawler) Run() {
 	// Start some runners and wait until they're done.
 	var wg sync.WaitGroup
 	ch := c.process()
-	for i := 0; i < 3; i++ {
+	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
 		go func() {
 			c.urlHandler(ch)

@@ -71,5 +71,5 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	crawler.Run()
+	crawler.Run(*concurrency)
 }

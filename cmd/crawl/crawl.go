@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"git.autistici.org/ale/crawl"
+	"git.autistici.org/ale/crawl/warc"
 	"github.com/PuerkitoBio/goquery"
 )
 
@@ -94,7 +95,7 @@ func hdr2str(h http.Header) []byte {
 }
 
 type warcSaveHandler struct {
-	warc       *crawl.WarcWriter
+	warc       *warc.Writer
 	warcInfoID string
 }
 
@@ -108,7 +109,7 @@ func (h *warcSaveHandler) Handle(c *crawl.Crawler, u string, depth int, resp *ht
 	// Dump the request.
 	var b bytes.Buffer
 	resp.Request.Write(&b)
-	hdr := crawl.NewWarcHeader()
+	hdr := warc.NewHeader()
 	hdr.Set("WARC-Type", "request")
 	hdr.Set("WARC-Target-URI", resp.Request.URL.String())
 	hdr.Set("WARC-Warcinfo-ID", h.warcInfoID)
@@ -122,7 +123,7 @@ func (h *warcSaveHandler) Handle(c *crawl.Crawler, u string, depth int, resp *ht
 	respPayload := bytes.Join([][]byte{
 		[]byte(statusLine), hdr2str(resp.Header), data},
 		[]byte{'\r', '\n'})
-	hdr = crawl.NewWarcHeader()
+	hdr = warc.NewHeader()
 	hdr.Set("WARC-Type", "response")
 	hdr.Set("WARC-Target-URI", resp.Request.URL.String())
 	hdr.Set("WARC-Warcinfo-ID", h.warcInfoID)
@@ -134,14 +135,14 @@ func (h *warcSaveHandler) Handle(c *crawl.Crawler, u string, depth int, resp *ht
 	return extractLinks(c, u, depth, resp, err)
 }
 
-func NewSaveHandler(w *crawl.WarcWriter) crawl.Handler {
+func NewSaveHandler(w *warc.Writer) crawl.Handler {
 	info := strings.Join([]string{
 		"Software: crawl/1.0\r\n",
 		"Format: WARC File Format 1.0\r\n",
 		"Conformsto: http://bibnum.bnf.fr/WARC/WARC_ISO_28500_version1_latestdraft.pdf\r\n",
 	}, "")
 
-	hdr := crawl.NewWarcHeader()
+	hdr := warc.NewHeader()
 	hdr.Set("WARC-Type", "warcinfo")
 	hdr.Set("WARC-Warcinfo-ID", hdr.Get("WARC-Record-ID"))
 	hdr.Set("Content-Length", strconv.Itoa(len(info)))
@@ -165,7 +166,7 @@ func main() {
 	seeds := crawl.MustParseURLs(flag.Args())
 	scope := crawl.NewSeedScope(seeds, *depth, strings.Split(*validSchemes, ","))
 
-	w := crawl.NewWarcWriter(outf)
+	w := warc.NewWriter(outf)
 	defer w.Close()
 
 	saver := NewSaveHandler(w)
@@ -174,5 +175,5 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	crawler.Run()
+	crawler.Run(*concurrency)
 }

@@ -1,4 +1,6 @@
-package crawl
+// Package to write WARC files.
+
+package warc
 
 import (
 	"fmt"
@@ -21,12 +23,12 @@ var (
 	}
 )
 
-// A Warc header. Header field names are case-sensitive.
-type WarcHeader map[string]string
+// A WARC header. Header field names are case-sensitive.
+type Header map[string]string
 
 // Set a header to the specified value. Multiple values are not
 // supported.
-func (h WarcHeader) Set(key, value string) {
+func (h Header) Set(key, value string) {
 	h[key] = value
 
 	// Keep Content-Type in sync with WARC-Type.
@@ -40,12 +42,12 @@ func (h WarcHeader) Set(key, value string) {
 }
 
 // Get the value of a header. If not found, returns an empty string.
-func (h WarcHeader) Get(key string) string {
+func (h Header) Get(key string) string {
 	return h[key]
 }
 
 // Encode the header to a Writer.
-func (h WarcHeader) Encode(w io.Writer) {
+func (h Header) Encode(w io.Writer) {
 	fmt.Fprintf(w, "%s\r\n", warcVersion)
 	for hdr, value := range h {
 		fmt.Fprintf(w, "%s: %s\r\n", hdr, value)
@@ -53,44 +55,68 @@ func (h WarcHeader) Encode(w io.Writer) {
 	fmt.Fprintf(w, "\r\n")
 }
 
-// NewWarcHeader returns a WarcHeader with its own unique ID and the
+// NewHeader returns a Header with its own unique ID and the
 // current timestamp.
-func NewWarcHeader() WarcHeader {
-	h := make(WarcHeader)
+func NewHeader() Header {
+	h := make(Header)
 	h.Set("WARC-Record-ID", fmt.Sprintf("<%s>", uuid.NewUUID().URN()))
 	h.Set("WARC-Date", time.Now().Format(warcTimeFmt))
 	h.Set("Content-Type", "application/octet-stream")
 	return h
 }
 
-// WarcWriter can write records to a file in WARC format.
-type WarcWriter struct {
-	writer io.WriteCloser
+// Writer can write records to a file in WARC format. It is safe
+// for concurrent access, since writes are serialized internally.
+type Writer struct {
+	writer   io.WriteCloser
+	gzwriter *gzip.Writer
+	lockCh   chan bool
 }
 
 type recordWriter struct {
 	io.Writer
+	lockCh chan bool
 }
 
 func (rw *recordWriter) Close() error {
 	// Add the end-of-record marker.
 	fmt.Fprintf(rw, "\r\n\r\n")
+
+	<-rw.lockCh
+
 	return nil
 }
 
 // NewRecord starts a new WARC record with the provided header. The
 // caller must call Close on the returned writer before creating the
-// next record.
-func (w *WarcWriter) NewRecord(hdr WarcHeader) io.WriteCloser {
-	hdr.Encode(w.writer)
-	return &recordWriter{w.writer}
+// next record. Note that this function may block until that condition
+// is satisfied.
+func (w *Writer) NewRecord(hdr Header) io.WriteCloser {
+	w.lockCh <- true
+	if w.gzwriter != nil {
+		w.gzwriter.Close()
+	}
+	w.gzwriter, _ = gzip.NewWriterLevel(w.writer, gzip.BestCompression)
+	w.gzwriter.Header.Name = hdr.Get("WARC-Record-ID")
+	hdr.Encode(w.gzwriter)
+	return &recordWriter{Writer: w.gzwriter, lockCh: w.lockCh}
 }
 
-// Close the WARC writer and flush all buffers.
-func (w *WarcWriter) Close() error {
+// Close the WARC writer and flush all buffers. This will also call
+// Close on the wrapped io.WriteCloser object.
+func (w *Writer) Close() error {
+	if err := w.gzwriter.Close(); err != nil {
+		return err
+	}
 	return w.writer.Close()
 }
 
-func NewWarcWriter(w io.WriteCloser) *WarcWriter {
-	return &WarcWriter{gzip.NewWriter(w)}
+// NewWriter initializes a new Writer and returns it.
+func NewWriter(w io.WriteCloser) *Writer {
+	return &Writer{
+		writer: w,
+		// Buffering is important here since we're using this
+		// channel as a semaphore.
+		lockCh: make(chan bool, 1),
+	}
 }
