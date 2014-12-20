@@ -135,7 +135,7 @@ func main() {
 
 	saver := NewSaveHandler(w)
 
-	crawler, err := crawl.NewCrawler("crawldb", seeds, scope, crawl.FetcherFunc(http.Get), saver)
+	crawler, err := crawl.NewCrawler("crawldb", seeds, scope, crawl.FetcherFunc(http.Get), crawl.NewRedirectHandler(saver))
 	if err != nil {
 		log.Fatal(err)
 	}

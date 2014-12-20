@@ -44,7 +44,7 @@ func main() {
 		crawl.NewSeedScope(seeds),
 	}
 
-	crawler, err := crawl.NewCrawler("crawldb", seeds, scope, crawl.FetcherFunc(http.Get), crawl.HandlerFunc(extractLinks))
+	crawler, err := crawl.NewCrawler("crawldb", seeds, scope, crawl.FetcherFunc(http.Get), crawl.NewRedirectHandler(crawl.HandlerFunc(extractLinks)))
 	if err != nil {
 		log.Fatal(err)
 	}
