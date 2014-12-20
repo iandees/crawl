@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	urlcssRx = regexp.MustCompile(`background.*:.*url\(["']?([^'"\)]+)["']?\)`)
+	urlcssRx = regexp.MustCompile(`.*:.*url\(["']?([^'"\)]+)["']?\)`)
 
 	linkMatches = []struct {
 		tag  string
@@ -32,6 +32,9 @@ func GetLinks(resp *http.Response) ([]*url.URL, error) {
 
 	ctype := resp.Header.Get("Content-Type")
 	if strings.HasPrefix(ctype, "text/html") {
+		// Use goquery to extract links from the parsed HTML
+		// contents (query patterns are described in the
+		// linkMatches table).
 		doc, err := goquery.NewDocumentFromResponse(resp)
 		if err != nil {
 			return nil, err
@@ -44,6 +47,8 @@ func GetLinks(resp *http.Response) ([]*url.URL, error) {
 			})
 		}
 	} else if strings.HasPrefix(ctype, "text/css") {
+		// Use a simple (and actually quite bad) regular
+		// expression to extract "url()" links from CSS.
 		if data, err := ioutil.ReadAll(resp.Body); err == nil {
 			for _, val := range urlcssRx.FindAllStringSubmatch(string(data), -1) {
 				outlinks = append(outlinks, val[1])
@@ -51,7 +56,8 @@ func GetLinks(resp *http.Response) ([]*url.URL, error) {
 		}
 	}
 
-	// Uniquify and parse outbound links.
+	// Parse outbound links relative to the request URI, and
+	// return unique results.
 	var result []*url.URL
 	links := make(map[string]*url.URL)
 	for _, val := range outlinks {
@@ -59,9 +65,8 @@ func GetLinks(resp *http.Response) ([]*url.URL, error) {
 			links[linkurl.String()] = linkurl
 		}
 	}
-	for _, link := range links {
-		result = append(result, link)
+	for _, u := range links {
+		result = append(result, u)
 	}
-
 	return result, nil
 }
