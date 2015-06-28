@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	warcTimeFmt      = time.RFC3339
+	warcTimeFmt      = "2006-01-02T15:04:05Z"
 	warcVersion      = "WARC/1.0"
 	warcContentTypes = map[string]string{
 		"warcinfo": "application/warc-fields",
@@ -60,7 +60,7 @@ func (h Header) Encode(w io.Writer) {
 func NewHeader() Header {
 	h := make(Header)
 	h.Set("WARC-Record-ID", fmt.Sprintf("<%s>", uuid.NewUUID().URN()))
-	h.Set("WARC-Date", time.Now().Format(warcTimeFmt))
+	h.Set("WARC-Date", time.Now().UTC().Format(warcTimeFmt))
 	h.Set("Content-Type", "application/octet-stream")
 	return h
 }
