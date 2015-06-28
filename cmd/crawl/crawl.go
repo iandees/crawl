@@ -13,6 +13,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"git.autistici.org/ale/crawl"
 	"git.autistici.org/ale/crawl/analysis"
@@ -115,6 +118,74 @@ func NewSaveHandler(w *warc.Writer) crawl.Handler {
 	}
 }
 
+type crawlStats struct {
+	bytes int64
+	start time.Time
+
+	lock   sync.Mutex
+	states map[int]int
+}
+
+func (c *crawlStats) Update(resp *http.Response) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.states[resp.StatusCode]++
+	resp.Body = &byteCounter{resp.Body}
+}
+
+func (c *crawlStats) UpdateBytes(n int64) {
+	atomic.AddInt64(&c.bytes, n)
+}
+
+func (c *crawlStats) Dump() {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	rate := float64(c.bytes) / time.Since(c.start).Seconds() / 1000
+	fmt.Fprintf(os.Stderr, "stats: downloaded %d bytes (%.4g KB/s), status: %v\n", c.bytes, rate, c.states)
+}
+
+var (
+	stats *crawlStats
+
+	client *http.Client
+)
+
+func fetch(urlstr string) (*http.Response, error) {
+	resp, err := client.Get(urlstr)
+	if err == nil {
+		stats.Update(resp)
+	}
+	return resp, err
+}
+
+func init() {
+	client = &http.Client{}
+
+	stats = &crawlStats{
+		states: make(map[int]int),
+		start:  time.Now(),
+	}
+
+	go func() {
+		for range time.Tick(10 * time.Second) {
+			stats.Dump()
+		}
+	}()
+}
+
+type byteCounter struct {
+	io.ReadCloser
+}
+
+func (b *byteCounter) Read(buf []byte) (int, error) {
+	n, err := b.ReadCloser.Read(buf)
+	if n > 0 {
+		stats.UpdateBytes(int64(n))
+	}
+	return n, err
+}
+
 func main() {
 	flag.Parse()
 
@@ -128,6 +199,7 @@ func main() {
 		crawl.NewSchemeScope(strings.Split(*validSchemes, ",")),
 		crawl.NewDepthScope(*depth),
 		crawl.NewSeedScope(seeds),
+		crawl.NewRegexpIgnoreScope(nil),
 	}
 
 	w := warc.NewWriter(outf)
@@ -135,7 +207,7 @@ func main() {
 
 	saver := NewSaveHandler(w)
 
-	crawler, err := crawl.NewCrawler("crawldb", seeds, scope, crawl.FetcherFunc(http.Get), crawl.NewRedirectHandler(saver))
+	crawler, err := crawl.NewCrawler("crawldb", seeds, scope, crawl.FetcherFunc(fetch), crawl.NewRedirectHandler(saver))
 	if err != nil {
 		log.Fatal(err)
 	}

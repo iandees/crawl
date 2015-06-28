@@ -3,6 +3,7 @@ package crawl
 import (
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 )
 
@@ -94,4 +95,31 @@ func NewSeedScope(seeds []*url.URL) Scope {
 		pfx.Add(s)
 	}
 	return NewURLPrefixScope(pfx)
+}
+
+type regexpIgnoreScope struct {
+	ignores []*regexp.Regexp
+}
+
+func (s *regexpIgnoreScope) Check(uri *url.URL, depth int) bool {
+	uriStr := uri.String()
+	for _, i := range s.ignores {
+		if i.MatchString(uriStr) {
+			return false
+		}
+	}
+	return true
+}
+
+func NewRegexpIgnoreScope(ignores []string) Scope {
+	if ignores == nil {
+		ignores = defaultIgnorePatterns
+	}
+	r := regexpIgnoreScope{
+		ignores: make([]*regexp.Regexp, 0, len(ignores)),
+	}
+	for _, i := range ignores {
+		r.ignores = append(r.ignores, regexp.MustCompile(i))
+	}
+	return &r
 }
