@@ -24,6 +24,7 @@ import (
 
 var (
 	dbPath       = flag.String("state", "crawldb", "crawl state database path")
+	keepDb       = flag.Bool("keep", false, "keep the state database when done")
 	concurrency  = flag.Int("c", 10, "concurrent workers")
 	depth        = flag.Int("depth", 10, "maximum link depth")
 	validSchemes = flag.String("schemes", "http,https", "comma-separated list of allowed protocols")
@@ -207,9 +208,14 @@ func main() {
 
 	saver := NewSaveHandler(w)
 
-	crawler, err := crawl.NewCrawler("crawldb", seeds, scope, crawl.FetcherFunc(fetch), crawl.NewRedirectHandler(saver))
+	crawler, err := crawl.NewCrawler(*dbPath, seeds, scope, crawl.FetcherFunc(fetch), crawl.NewRedirectHandler(saver))
 	if err != nil {
 		log.Fatal(err)
 	}
 	crawler.Run(*concurrency)
+
+	crawler.Close()
+	if !*keepDb {
+		os.RemoveAll(*dbPath)
+	}
 }

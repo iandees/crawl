@@ -319,6 +319,10 @@ func (c *Crawler) Run(concurrency int) {
 	wg.Wait()
 }
 
+func (c *Crawler) Close() {
+	c.db.Close()
+}
+
 type redirectHandler struct {
 	h Handler
 }
