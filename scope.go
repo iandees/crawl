@@ -7,7 +7,9 @@ import (
 	"strings"
 )
 
+// Scope defines the crawling scope.
 type Scope interface {
+	// Check a URL to see if it's in scope for crawling.
 	Check(*url.URL, int) bool
 }
 
@@ -48,14 +50,16 @@ func NewSchemeScope(schemes []string) Scope {
 // eventual "www." prefix.
 type URLPrefixMap map[string]struct{}
 
-func normalizeUrlPrefix(uri *url.URL) string {
+func normalizeURLPrefix(uri *url.URL) string {
 	return strings.TrimPrefix(uri.Host, "www.") + strings.TrimSuffix(uri.Path, "/")
 }
 
+// Add an URL to the prefix map.
 func (m URLPrefixMap) Add(uri *url.URL) {
-	m[normalizeUrlPrefix(uri)] = struct{}{}
+	m[normalizeURLPrefix(uri)] = struct{}{}
 }
 
+// Contains returns true if the given URL matches the prefix map.
 func (m URLPrefixMap) Contains(uri *url.URL) bool {
 	s := strings.TrimPrefix(uri.Host, "www.")
 	if _, ok := m[s]; ok {
@@ -111,6 +115,8 @@ func (s *regexpIgnoreScope) Check(uri *url.URL, depth int) bool {
 	return true
 }
 
+// NewRegexpIgnoreScope returns a Scope that filters out URLs
+// according to a list of regular expressions.
 func NewRegexpIgnoreScope(ignores []string) Scope {
 	if ignores == nil {
 		ignores = defaultIgnorePatterns

@@ -27,6 +27,8 @@ var (
 	}
 )
 
+// GetLinks returns all the links found in a document. Currently only
+// parses HTML pages and CSS stylesheets.
 func GetLinks(resp *http.Response) ([]*url.URL, error) {
 	var outlinks []string
 
