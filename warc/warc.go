@@ -23,7 +23,7 @@ var (
 	}
 )
 
-// A WARC header. Header field names are case-sensitive.
+// Header for a WARC record. Header field names are case-sensitive.
 type Header map[string]string
 
 // Set a header to the specified value. Multiple values are not

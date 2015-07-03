@@ -99,7 +99,7 @@ func (h *warcSaveHandler) Handle(c *crawl.Crawler, u string, depth int, resp *ht
 	return extractLinks(c, u, depth, resp, err)
 }
 
-func NewSaveHandler(w *warc.Writer) crawl.Handler {
+func newWarcSaveHandler(w *warc.Writer) crawl.Handler {
 	info := strings.Join([]string{
 		"Software: crawl/1.0\r\n",
 		"Format: WARC File Format 1.0\r\n",
@@ -206,7 +206,7 @@ func main() {
 	w := warc.NewWriter(outf)
 	defer w.Close()
 
-	saver := NewSaveHandler(w)
+	saver := newWarcSaveHandler(w)
 
 	crawler, err := crawl.NewCrawler(*dbPath, seeds, scope, crawl.FetcherFunc(fetch), crawl.NewRedirectHandler(saver))
 	if err != nil {

@@ -319,6 +319,7 @@ func (c *Crawler) Run(concurrency int) {
 	wg.Wait()
 }
 
+// Close the database and release resources associated with the crawler state.
 func (c *Crawler) Close() {
 	c.db.Close()
 }
