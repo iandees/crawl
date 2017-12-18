@@ -1,0 +1,9 @@
+
+stages:
+  - test
+
+run_tests:
+  stage: test
+  image: "ai/test:go"
+  script: "go-test-runner ./..."
+
