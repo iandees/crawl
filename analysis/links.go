@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	urlcssRx = regexp.MustCompile(`.*:.*url\(["']?([^'"\)]+)["']?\)`)
+	urlcssRx = regexp.MustCompile(`(@import|.*:).*url\(["']?([^'"\)]+)["']?\)`)
 
 	linkMatches = []struct {
 		tag  string
