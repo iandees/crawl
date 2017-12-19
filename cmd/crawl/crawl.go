@@ -11,11 +11,13 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"runtime/pprof"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"git.autistici.org/ale/crawl"
@@ -224,9 +226,26 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Set up signal handlers so we can terminate gently if possible.
+	var signaled atomic.Value
+	signaled.Store(false)
+	sigCh := make(chan os.Signal, 1)
+	go func() {
+		<-sigCh
+		log.Printf("exiting due to signal")
+		signaled.Store(true)
+		crawler.Stop()
+	}()
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
 	crawler.Run(*concurrency)
 
 	crawler.Close()
+
+	if signaled.Load().(bool) {
+		os.Exit(1)
+	}
 	if !*keepDb {
 		os.RemoveAll(*dbPath)
 	}
