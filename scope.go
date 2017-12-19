@@ -10,14 +10,14 @@ import (
 // Scope defines the crawling scope.
 type Scope interface {
 	// Check a URL to see if it's in scope for crawling.
-	Check(*url.URL, int) bool
+	Check(Outlink, int) bool
 }
 
 type maxDepthScope struct {
 	maxDepth int
 }
 
-func (s *maxDepthScope) Check(uri *url.URL, depth int) bool {
+func (s *maxDepthScope) Check(_ Outlink, depth int) bool {
 	return depth < s.maxDepth
 }
 
@@ -31,8 +31,8 @@ type schemeScope struct {
 	allowedSchemes map[string]struct{}
 }
 
-func (s *schemeScope) Check(uri *url.URL, depth int) bool {
-	_, ok := s.allowedSchemes[uri.Scheme]
+func (s *schemeScope) Check(link Outlink, depth int) bool {
+	_, ok := s.allowedSchemes[link.URL.Scheme]
 	return ok
 }
 
@@ -81,8 +81,8 @@ type urlPrefixScope struct {
 	prefixes URLPrefixMap
 }
 
-func (s *urlPrefixScope) Check(uri *url.URL, depth int) bool {
-	return s.prefixes.Contains(uri)
+func (s *urlPrefixScope) Check(link Outlink, depth int) bool {
+	return s.prefixes.Contains(link.URL)
 }
 
 // NewURLPrefixScope returns a Scope that limits the crawl to a set of
@@ -105,8 +105,8 @@ type regexpIgnoreScope struct {
 	ignores []*regexp.Regexp
 }
 
-func (s *regexpIgnoreScope) Check(uri *url.URL, depth int) bool {
-	uriStr := uri.String()
+func (s *regexpIgnoreScope) Check(link Outlink, depth int) bool {
+	uriStr := link.URL.String()
 	for _, i := range s.ignores {
 		if i.MatchString(uriStr) {
 			return false
@@ -128,4 +128,51 @@ func NewRegexpIgnoreScope(ignores []string) Scope {
 		r.ignores = append(r.ignores, regexp.MustCompile(i))
 	}
 	return &r
+}
+
+// NewIncludeRelatedScope always includes resources with TagRelated.
+func NewIncludeRelatedScope() Scope {
+	return &includeRelatedScope{}
+}
+
+type includeRelatedScope struct{}
+
+func (s *includeRelatedScope) Check(link Outlink, _ int) bool {
+	return link.Tag == TagRelated
+}
+
+// AND performs a boolean AND.
+func AND(elems ...Scope) Scope {
+	return &andScope{elems: elems}
+}
+
+type andScope struct {
+	elems []Scope
+}
+
+func (s *andScope) Check(link Outlink, depth int) bool {
+	for _, e := range s.elems {
+		if !e.Check(link, depth) {
+			return false
+		}
+	}
+	return true
+}
+
+// OR performs a boolean OR.
+func OR(elems ...Scope) Scope {
+	return &orScope{elems: elems}
+}
+
+type orScope struct {
+	elems []Scope
+}
+
+func (s *orScope) Check(link Outlink, depth int) bool {
+	for _, e := range s.elems {
+		if e.Check(link, depth) {
+			return true
+		}
+	}
+	return false
 }

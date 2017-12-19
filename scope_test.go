@@ -19,7 +19,7 @@ type testScopeEntry struct {
 func runScopeTest(t *testing.T, sc Scope, testdata []testScopeEntry) {
 	for _, td := range testdata {
 		uri := mustParseURL(td.uri)
-		result := sc.Check(uri, td.depth)
+		result := sc.Check(Outlink{URL: uri, Tag: TagPrimary}, td.depth)
 		if result != td.expected {
 			t.Errorf("Check(%s, %d) -> got %v, want %v", td.uri, td.depth, result, td.expected)
 		}

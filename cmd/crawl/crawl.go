@@ -23,12 +23,13 @@ import (
 )
 
 var (
-	dbPath       = flag.String("state", "crawldb", "crawl state database path")
-	keepDb       = flag.Bool("keep", false, "keep the state database when done")
-	concurrency  = flag.Int("c", 10, "concurrent workers")
-	depth        = flag.Int("depth", 10, "maximum link depth")
-	validSchemes = flag.String("schemes", "http,https", "comma-separated list of allowed protocols")
-	outputFile   = flag.String("output", "crawl.warc.gz", "output WARC file")
+	dbPath               = flag.String("state", "crawldb", "crawl state database path")
+	keepDb               = flag.Bool("keep", false, "keep the state database when done")
+	concurrency          = flag.Int("c", 10, "concurrent workers")
+	depth                = flag.Int("depth", 10, "maximum link depth")
+	validSchemes         = flag.String("schemes", "http,https", "comma-separated list of allowed protocols")
+	alwaysIncludeRelated = flag.Bool("include-related", false, "always include related resources (css, images, etc)")
+	outputFile           = flag.String("output", "crawl.warc.gz", "output WARC file")
 )
 
 func extractLinks(c *crawl.Crawler, u string, depth int, resp *http.Response, err error) error {
@@ -196,11 +197,14 @@ func main() {
 	}
 
 	seeds := crawl.MustParseURLs(flag.Args())
-	scope := []crawl.Scope{
+	scope := crawl.AND(
 		crawl.NewSchemeScope(strings.Split(*validSchemes, ",")),
 		crawl.NewDepthScope(*depth),
 		crawl.NewSeedScope(seeds),
 		crawl.NewRegexpIgnoreScope(nil),
+	)
+	if *alwaysIncludeRelated {
+		scope = crawl.OR(scope, crawl.NewIncludeRelatedScope())
 	}
 
 	w := warc.NewWriter(outf)

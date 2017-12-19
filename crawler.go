@@ -75,6 +75,20 @@ func (i *gobIterator) Value(obj interface{}) error {
 	return gob.NewDecoder(bytes.NewBuffer(i.Iterator.Value())).Decode(obj)
 }
 
+// Outlink is a tagged outbound link.
+type Outlink struct {
+	URL *url.URL
+	Tag int
+}
+
+const (
+	// TagPrimary is a primary reference (another web page).
+	TagPrimary = iota
+
+	// TagRelated is a secondary resource, related to a page.
+	TagRelated
+)
+
 // URLInfo stores information about a crawled URL.
 type URLInfo struct {
 	URL        string
@@ -118,7 +132,7 @@ type Crawler struct {
 	db      *gobDB
 	queue   *queue
 	seeds   []*url.URL
-	scopes  []Scope
+	scope   Scope
 	fetcher Fetcher
 	handler Handler
 
@@ -126,16 +140,14 @@ type Crawler struct {
 }
 
 // Enqueue a (possibly new) URL for processing.
-func (c *Crawler) Enqueue(u *url.URL, depth int) {
-	// Normalize the URL.
-	urlStr := purell.NormalizeURL(u, purell.FlagsSafe|purell.FlagRemoveDotSegments|purell.FlagRemoveDuplicateSlashes|purell.FlagRemoveFragment|purell.FlagRemoveDirectoryIndex|purell.FlagSortQuery)
-
-	// See if it's in scope. Checks are ANDed.
-	for _, sc := range c.scopes {
-		if !sc.Check(u, depth) {
-			return
-		}
+func (c *Crawler) Enqueue(link Outlink, depth int) {
+	// See if it's in scope.
+	if !c.scope.Check(link, depth) {
+		return
 	}
+
+	// Normalize the URL.
+	urlStr := purell.NormalizeURL(link.URL, purell.FlagsSafe|purell.FlagRemoveDotSegments|purell.FlagRemoveDuplicateSlashes|purell.FlagRemoveFragment|purell.FlagRemoveDirectoryIndex|purell.FlagSortQuery)
 
 	// Protect the read-modify-update below with a mutex.
 	c.enqueueMx.Lock()
@@ -228,7 +240,7 @@ func MustParseURLs(urls []string) []*url.URL {
 }
 
 // NewCrawler creates a new Crawler object with the specified behavior.
-func NewCrawler(path string, seeds []*url.URL, scopes []Scope, f Fetcher, h Handler) (*Crawler, error) {
+func NewCrawler(path string, seeds []*url.URL, scope Scope, f Fetcher, h Handler) (*Crawler, error) {
 	// Open the crawl database.
 	db, err := newGobDB(path)
 	if err != nil {
@@ -241,7 +253,7 @@ func NewCrawler(path string, seeds []*url.URL, scopes []Scope, f Fetcher, h Hand
 		fetcher: f,
 		handler: h,
 		seeds:   seeds,
-		scopes:  scopes,
+		scope:   scope,
 	}
 
 	// Recover active tasks.
@@ -255,7 +267,7 @@ func NewCrawler(path string, seeds []*url.URL, scopes []Scope, f Fetcher, h Hand
 func (c *Crawler) Run(concurrency int) {
 	// Load initial seeds into the queue.
 	for _, u := range c.seeds {
-		c.Enqueue(u, 0)
+		c.Enqueue(Outlink{URL: u, Tag: TagPrimary}, 0)
 	}
 
 	// Start some runners and wait until they're done.
@@ -291,7 +303,7 @@ func (wrap *redirectHandler) Handle(c *Crawler, u string, depth int, resp *http.
 				if err != nil {
 					log.Printf("error parsing Location header: %v", err)
 				} else {
-					c.Enqueue(locationURL, depth+1)
+					c.Enqueue(Outlink{URL: locationURL, Tag: TagPrimary}, depth+1)
 				}
 			}
 		} else {
