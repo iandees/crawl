@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,6 +31,8 @@ var (
 	validSchemes         = flag.String("schemes", "http,https", "comma-separated list of allowed protocols")
 	alwaysIncludeRelated = flag.Bool("include-related", false, "always include related resources (css, images, etc)")
 	outputFile           = flag.String("output", "crawl.warc.gz", "output WARC file")
+
+	cpuprofile = flag.String("cpuprofile", "", "create cpu profile")
 )
 
 func extractLinks(c *crawl.Crawler, u string, depth int, resp *http.Response, err error) error {
@@ -147,14 +150,10 @@ func (c *crawlStats) Dump() {
 	fmt.Fprintf(os.Stderr, "stats: downloaded %d bytes (%.4g KB/s), status: %v\n", c.bytes, rate, c.states)
 }
 
-var (
-	stats *crawlStats
-
-	client *http.Client
-)
+var stats *crawlStats
 
 func fetch(urlstr string) (*http.Response, error) {
-	resp, err := client.Get(urlstr)
+	resp, err := crawl.DefaultClient.Get(urlstr)
 	if err == nil {
 		stats.Update(resp)
 	}
@@ -162,8 +161,6 @@ func fetch(urlstr string) (*http.Response, error) {
 }
 
 func init() {
-	client = &http.Client{}
-
 	stats = &crawlStats{
 		states: make(map[int]int),
 		start:  time.Now(),
@@ -190,6 +187,17 @@ func (b *byteCounter) Read(buf []byte) (int, error) {
 
 func main() {
 	flag.Parse()
+
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal("could not create CPU profile: ", err)
+		}
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+		defer pprof.StopCPUProfile()
+	}
 
 	outf, err := os.Create(*outputFile)
 	if err != nil {
