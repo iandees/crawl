@@ -293,22 +293,24 @@ type redirectHandler struct {
 }
 
 func (wrap *redirectHandler) Handle(c *Crawler, u string, depth int, resp *http.Response, err error) error {
-	if err == nil {
-		if resp.StatusCode == 200 {
-			err = wrap.h.Handle(c, u, depth, resp, err)
-		} else if resp.StatusCode > 300 && resp.StatusCode < 400 {
-			location := resp.Header.Get("Location")
-			if location != "" {
-				locationURL, err := resp.Request.URL.Parse(location)
-				if err != nil {
-					log.Printf("error parsing Location header: %v", err)
-				} else {
-					c.Enqueue(Outlink{URL: locationURL, Tag: TagPrimary}, depth+1)
-				}
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode == 200 {
+		err = wrap.h.Handle(c, u, depth, resp, err)
+	} else if resp.StatusCode > 300 && resp.StatusCode < 400 {
+		location := resp.Header.Get("Location")
+		if location != "" {
+			locationURL, err := resp.Request.URL.Parse(location)
+			if err != nil {
+				log.Printf("error parsing Location header: %v", err)
+			} else {
+				c.Enqueue(Outlink{URL: locationURL, Tag: TagPrimary}, depth+1)
 			}
-		} else {
-			err = errors.New(resp.Status)
 		}
+	} else {
+		err = errors.New(resp.Status)
 	}
 	return err
 }

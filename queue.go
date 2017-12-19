@@ -65,10 +65,8 @@ func (q *queue) Add(wb *leveldb.Batch, urlStr string, depth int, when time.Time)
 
 func (q *queue) acquire(qp queuePair) {
 	wb := new(leveldb.Batch)
-
 	q.db.PutObjBatch(wb, activeQueueKey(qp.key), qp)
 	wb.Delete(qp.key)
-
 	q.db.Write(wb, nil)
 
 	atomic.AddInt32(&q.numActive, 1)
