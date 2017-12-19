@@ -26,6 +26,7 @@ var (
 		{"link", "href", crawl.TagRelated},
 		{"img", "src", crawl.TagRelated},
 		{"script", "src", crawl.TagRelated},
+		{"iframe", "src", crawl.TagRelated},
 	}
 )
 
