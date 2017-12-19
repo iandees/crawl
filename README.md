@@ -34,8 +34,8 @@ The crawling scope is controlled with a set of overlapping checks:
   prefix is implicitly ignored)
 * maximum crawling depth can be controlled with the *--depth* option
 * resources related to a page (CSS, JS, etc) will always be fetched,
-  even if on external domains, if the *--include-related* option is
-  specified
+  even if on external domains, unless the *--exclude-related* option
+  is specified
 
 If the program is interrupted, running it again with the same command
 line from the same directory will cause it to resume crawling from

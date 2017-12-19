@@ -26,13 +26,13 @@ import (
 )
 
 var (
-	dbPath               = flag.String("state", "crawldb", "crawl state database path")
-	keepDb               = flag.Bool("keep", false, "keep the state database when done")
-	concurrency          = flag.Int("c", 10, "concurrent workers")
-	depth                = flag.Int("depth", 10, "maximum link depth")
-	validSchemes         = flag.String("schemes", "http,https", "comma-separated list of allowed protocols")
-	alwaysIncludeRelated = flag.Bool("include-related", false, "always include related resources (css, images, etc)")
-	outputFile           = flag.String("output", "crawl.warc.gz", "output WARC file")
+	dbPath         = flag.String("state", "crawldb", "crawl state database path")
+	keepDb         = flag.Bool("keep", false, "keep the state database when done")
+	concurrency    = flag.Int("c", 10, "concurrent workers")
+	depth          = flag.Int("depth", 100, "maximum link depth")
+	validSchemes   = flag.String("schemes", "http,https", "comma-separated list of allowed protocols")
+	excludeRelated = flag.Bool("exclude-related", false, "include related resources (css, images, etc) only if their URL is in scope")
+	outputFile     = flag.String("output", "crawl.warc.gz", "output WARC file")
 
 	cpuprofile = flag.String("cpuprofile", "", "create cpu profile")
 )
@@ -213,7 +213,7 @@ func main() {
 		crawl.NewSeedScope(seeds),
 		crawl.NewRegexpIgnoreScope(nil),
 	)
-	if *alwaysIncludeRelated {
+	if !*excludeRelated {
 		scope = crawl.OR(scope, crawl.NewIncludeRelatedScope())
 	}
 
