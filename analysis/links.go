@@ -71,6 +71,10 @@ func GetLinks(resp *http.Response) ([]crawl.Outlink, error) {
 	var result []crawl.Outlink
 	links := make(map[string]crawl.Outlink)
 	for _, l := range outlinks {
+		// Skip data: URLs altogether.
+		if strings.HasPrefix(l.URL, "data:") {
+			continue
+		}
 		if linkurl, err := resp.Request.URL.Parse(l.URL); err == nil {
 			links[linkurl.String()] = crawl.Outlink{
 				URL: linkurl,
