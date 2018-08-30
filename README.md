@@ -11,10 +11,9 @@ interrupted and restarted without issues.
 
 # Installation
 
-From this source directory (checked out in the correct place in your
-GOPATH), run:
+You can install this package simply by running:
 
-    $ go install cmd/crawl
+    $ go install git.autistici.org/ale/crawl/cmd/crawl
 
 # Usage
 
