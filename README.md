@@ -11,9 +11,12 @@ interrupted and restarted without issues.
 
 # Installation
 
-You can install this package simply by running:
+Assuming you have a proper [Go](https://golang.org/) environment setup,
+you can install this package by running:
 
     $ go install git.autistici.org/ale/crawl/cmd/crawl
+
+This should install the *crawl* binary in your $GOPATH/bin directory.
 
 # Usage
 
