@@ -3,8 +3,11 @@ A very simple crawler
 
 This tool can crawl a bunch of URLs for HTML content, and save the
 results in a nice WARC file. It has little control over its traffic,
-save for a limit on concurrent outbound requests. Its main purpose is
-to quickly and efficiently save websites for archival purposes.
+save for a limit on concurrent outbound requests. An external tool
+like `trickle` can be used to limit bandwidth.
+
+Its main purpose is to quickly and efficiently save websites for
+archival purposes.
 
 The *crawl* tool saves its state in a database, so it can be safely
 interrupted and restarted without issues.
