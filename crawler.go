@@ -158,7 +158,7 @@ func (c *Crawler) Enqueue(link Outlink, depth int) error {
 	}
 
 	// Normalize the URL.
-	urlStr := purell.NormalizeURL(link.URL, purell.FlagsSafe|purell.FlagRemoveDotSegments|purell.FlagRemoveDuplicateSlashes|purell.FlagRemoveFragment|purell.FlagRemoveDirectoryIndex|purell.FlagSortQuery)
+	urlStr := purell.NormalizeURL(link.URL, purell.FlagsSafe|purell.FlagRemoveDotSegments|purell.FlagRemoveDuplicateSlashes|purell.FlagRemoveFragment|purell.FlagSortQuery)
 
 	// Protect the read-modify-update below with a mutex.
 	c.enqueueMx.Lock()
