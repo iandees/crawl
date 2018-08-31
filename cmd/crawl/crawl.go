@@ -62,6 +62,7 @@ func hdr2str(h http.Header) []byte {
 type warcSaveHandler struct {
 	warc       *warc.Writer
 	warcInfoID string
+	numWritten int
 }
 
 func (h *warcSaveHandler) writeWARCRecord(typ, uri string, data []byte) error {
@@ -108,6 +109,8 @@ func (h *warcSaveHandler) Handle(c *crawl.Crawler, u string, depth int, resp *ht
 	if werr := h.writeWARCRecord("response", resp.Request.URL.String(), respPayload); werr != nil {
 		return werr
 	}
+
+	h.numWritten++
 
 	return extractLinks(c, u, depth, resp, nil)
 }
