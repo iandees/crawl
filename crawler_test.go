@@ -44,7 +44,7 @@ func TestCrawler(t *testing.T) {
 		return nil
 	})
 
-	crawler, err := NewCrawler(dir+"/crawl.db", seeds, scope, FetcherFunc(http.Get), NewRedirectHandler(h))
+	crawler, err := NewCrawler(dir+"/crawl.db", seeds, scope, FetcherFunc(http.Get), FollowRedirects(h))
 	if err != nil {
 		t.Fatal("NewCrawler", err)
 	}

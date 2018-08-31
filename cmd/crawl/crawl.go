@@ -81,11 +81,7 @@ func (h *warcSaveHandler) writeWARCRecord(typ, uri string, data []byte) error {
 	return w.Close()
 }
 
-func (h *warcSaveHandler) Handle(c *crawl.Crawler, u string, depth int, resp *http.Response, err error) error {
-	if err != nil {
-		return nil
-	}
-
+func (h *warcSaveHandler) Handle(c *crawl.Crawler, u string, depth int, resp *http.Response, _ error) error {
 	// Read the response body (so we can save it to the WARC
 	// output) and replace it with a buffer.
 	data, derr := ioutil.ReadAll(resp.Body)
@@ -113,7 +109,7 @@ func (h *warcSaveHandler) Handle(c *crawl.Crawler, u string, depth int, resp *ht
 		return werr
 	}
 
-	return extractLinks(c, u, depth, resp, err)
+	return extractLinks(c, u, depth, resp, nil)
 }
 
 func newWarcSaveHandler(w *warc.Writer) (crawl.Handler, error) {
@@ -240,7 +236,13 @@ func main() {
 		log.Fatal(err)
 	}
 
-	crawler, err := crawl.NewCrawler(*dbPath, seeds, scope, crawl.FetcherFunc(fetch), crawl.NewRedirectHandler(saver))
+	crawler, err := crawl.NewCrawler(
+		*dbPath,
+		seeds,
+		scope,
+		crawl.FetcherFunc(fetch),
+		crawl.HandleRetries(crawl.FollowRedirects(crawl.FilterErrors(saver))),
+	)
 	if err != nil {
 		log.Fatal(err)
 	}

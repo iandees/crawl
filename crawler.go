@@ -115,8 +115,9 @@ func (f FetcherFunc) Fetch(u string) (*http.Response, error) {
 }
 
 // A Handler processes crawled contents. Any errors returned by public
-// implementations of this interface are considered permanent and will
-// not cause the URL to be fetched again.
+// implementations of this interface are considered fatal and will
+// cause the crawl to abort. The URL will be removed from the queue
+// unless the handler returns the special error ErrRetryRequest.
 type Handler interface {
 	// Handle the response from a URL.
 	Handle(*Crawler, string, int, *http.Response, error) error
@@ -129,6 +130,10 @@ type HandlerFunc func(*Crawler, string, int, *http.Response, error) error
 func (f HandlerFunc) Handle(db *Crawler, u string, depth int, resp *http.Response, err error) error {
 	return f(db, u, depth, resp, err)
 }
+
+// ErrRetryRequest is returned by a Handler when the request should be
+// retried after some time.
+var ErrRetryRequest = errors.New("retry_request")
 
 // The Crawler object contains the crawler state.
 type Crawler struct {
@@ -234,21 +239,22 @@ func (c *Crawler) urlHandler(queue <-chan queuePair) {
 		// Invoke the handler (even if the fetcher errored
 		// out). Errors in handling requests are fatal, crawl
 		// will be aborted.
-		Must(c.handler.Handle(c, p.URL, p.Depth, httpResp, httpErr))
-
-		// Write the result in our database.
-		wb := new(leveldb.Batch)
+		err := c.handler.Handle(c, p.URL, p.Depth, httpResp, httpErr)
 		if httpErr == nil {
 			respBody.Close() // nolint
-
-			// Remove the URL from the queue if the fetcher was successful.
-			c.queue.Release(wb, p)
-		} else {
-			info.Error = httpErr.Error()
-			log.Printf("error retrieving %s: %v", p.URL, httpErr)
-			Must(c.queue.Retry(wb, p, errorRetryDelay))
 		}
 
+		wb := new(leveldb.Batch)
+		switch err {
+		case nil:
+			c.queue.Release(wb, p)
+		case ErrRetryRequest:
+			Must(c.queue.Retry(wb, p, errorRetryDelay))
+		default:
+			log.Fatalf("fatal error in handling %s: %v", p.URL, err)
+		}
+
+		// Write the result in our database.
 		Must(c.db.PutObjBatch(wb, urlkey, &info))
 		Must(c.db.Write(wb, nil))
 	}
@@ -327,37 +333,57 @@ func (c *Crawler) Close() {
 	c.db.Close() // nolint
 }
 
-type redirectHandler struct {
-	h Handler
-}
+// FollowRedirects returns a Handler that follows HTTP redirects
+// and adds them to the queue for crawling. It will call the wrapped
+// handler on all requests regardless.
+func FollowRedirects(wrap Handler) Handler {
+	return HandlerFunc(func(c *Crawler, u string, depth int, resp *http.Response, err error) error {
+		if herr := wrap.Handle(c, u, depth, resp, err); herr != nil {
+			return herr
+		}
 
-func (wrap *redirectHandler) Handle(c *Crawler, u string, depth int, resp *http.Response, err error) error {
-	if err != nil {
-		return err
-	}
+		if err != nil {
+			return nil
+		}
 
-	if resp.StatusCode == 200 {
-		err = wrap.h.Handle(c, u, depth, resp, err)
-	} else if resp.StatusCode > 300 && resp.StatusCode < 400 {
 		location := resp.Header.Get("Location")
-		if location != "" {
+		if resp.StatusCode >= 300 && resp.StatusCode < 400 && location != "" {
 			locationURL, uerr := resp.Request.URL.Parse(location)
 			if uerr != nil {
 				log.Printf("error parsing Location header: %v", uerr)
 			} else {
-				Must(c.Enqueue(Outlink{URL: locationURL, Tag: TagPrimary}, depth+1))
+				return c.Enqueue(Outlink{URL: locationURL, Tag: TagPrimary}, depth+1)
 			}
 		}
-	} else {
-		err = errors.New(resp.Status)
-	}
-	return err
+		return nil
+	})
 }
 
-// NewRedirectHandler returns a Handler that follows HTTP redirects,
-// and will call the wrapped handler on every request with HTTP status 200.
-func NewRedirectHandler(wrap Handler) Handler {
-	return &redirectHandler{wrap}
+// FilterErrors returns a Handler that forwards only requests with a
+// "successful" HTTP status code (anything < 400). When using this
+// wrapper, subsequent Handle calls will always have err set to nil.
+func FilterErrors(wrap Handler) Handler {
+	return HandlerFunc(func(c *Crawler, u string, depth int, resp *http.Response, err error) error {
+		if err != nil {
+			return nil
+		}
+		if resp.StatusCode >= 400 {
+			return nil
+		}
+		return wrap.Handle(c, u, depth, resp, nil)
+	})
+}
+
+// HandleRetries returns a Handler that will retry requests on
+// temporary errors (all transport-level errors are considered
+// temporary, as well as any HTTP status code >= 500).
+func HandleRetries(wrap Handler) Handler {
+	return HandlerFunc(func(c *Crawler, u string, depth int, resp *http.Response, err error) error {
+		if err != nil || resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+			return ErrRetryRequest
+		}
+		return wrap.Handle(c, u, depth, resp, nil)
+	})
 }
 
 // Must will abort the program with a message when we encounter an

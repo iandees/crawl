@@ -20,11 +20,7 @@ var (
 	validSchemes = flag.String("schemes", "http,https", "comma-separated list of allowed protocols")
 )
 
-func extractLinks(c *crawl.Crawler, u string, depth int, resp *http.Response, err error) error {
-	if err != nil {
-		return nil
-	}
-
+func extractLinks(c *crawl.Crawler, u string, depth int, resp *http.Response, _ error) error {
 	links, err := analysis.GetLinks(resp)
 	if err != nil {
 		// Not a fatal error, just a bad web page.
@@ -50,7 +46,13 @@ func main() {
 		crawl.NewSeedScope(seeds),
 	)
 
-	crawler, err := crawl.NewCrawler("crawldb", seeds, scope, crawl.FetcherFunc(http.Get), crawl.NewRedirectHandler(crawl.HandlerFunc(extractLinks)))
+	crawler, err := crawl.NewCrawler(
+		"crawldb",
+		seeds,
+		scope,
+		crawl.FetcherFunc(http.Get),
+		crawl.HandleRetries(crawl.FollowRedirects(crawl.FilterErrors(crawl.HandlerFunc(extractLinks)))),
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
