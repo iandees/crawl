@@ -22,12 +22,13 @@ var (
 
 func extractLinks(c *crawl.Crawler, u string, depth int, resp *http.Response, err error) error {
 	if err != nil {
-		return err
+		return nil
 	}
 
 	links, err := analysis.GetLinks(resp)
 	if err != nil {
-		return err
+		// Not a fatal error, just a bad web page.
+		return nil
 	}
 
 	for _, link := range links {

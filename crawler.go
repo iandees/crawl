@@ -20,6 +20,8 @@ import (
 	lutil "github.com/syndtr/goleveldb/leveldb/util"
 )
 
+var errorRetryDelay = 180 * time.Second
+
 type gobDB struct {
 	*leveldb.DB
 }
@@ -95,7 +97,7 @@ type URLInfo struct {
 	URL        string
 	StatusCode int
 	CrawledAt  time.Time
-	Error      error
+	Error      string
 }
 
 // A Fetcher retrieves contents from remote URLs.
@@ -229,9 +231,12 @@ func (c *Crawler) urlHandler(queue <-chan queuePair) {
 			info.StatusCode = httpResp.StatusCode
 		}
 
-		// Invoke the handler (even if the fetcher errored out).
-		info.Error = c.handler.Handle(c, p.URL, p.Depth, httpResp, httpErr)
+		// Invoke the handler (even if the fetcher errored
+		// out). Errors in handling requests are fatal, crawl
+		// will be aborted.
+		Must(c.handler.Handle(c, p.URL, p.Depth, httpResp, httpErr))
 
+		// Write the result in our database.
 		wb := new(leveldb.Batch)
 		if httpErr == nil {
 			respBody.Close() // nolint
@@ -239,8 +244,9 @@ func (c *Crawler) urlHandler(queue <-chan queuePair) {
 			// Remove the URL from the queue if the fetcher was successful.
 			c.queue.Release(wb, p)
 		} else {
+			info.Error = httpErr.Error()
 			log.Printf("error retrieving %s: %v", p.URL, httpErr)
-			Must(c.queue.Retry(wb, p, 300*time.Second))
+			Must(c.queue.Retry(wb, p, errorRetryDelay))
 		}
 
 		Must(c.db.PutObjBatch(wb, urlkey, &info))

@@ -40,7 +40,8 @@ var (
 func extractLinks(c *crawl.Crawler, u string, depth int, resp *http.Response, _ error) error {
 	links, err := analysis.GetLinks(resp)
 	if err != nil {
-		return err
+		// This is not a fatal error, just a bad web page.
+		return nil
 	}
 
 	for _, link := range links {
@@ -82,7 +83,7 @@ func (h *warcSaveHandler) writeWARCRecord(typ, uri string, data []byte) error {
 
 func (h *warcSaveHandler) Handle(c *crawl.Crawler, u string, depth int, resp *http.Response, err error) error {
 	if err != nil {
-		return err
+		return nil
 	}
 
 	// Read the response body (so we can save it to the WARC
@@ -104,9 +105,10 @@ func (h *warcSaveHandler) Handle(c *crawl.Crawler, u string, depth int, resp *ht
 
 	// Dump the response.
 	statusLine := fmt.Sprintf("HTTP/1.1 %s", resp.Status)
-	respPayload := bytes.Join([][]byte{
-		[]byte(statusLine), hdr2str(resp.Header), data},
-		[]byte{'\r', '\n'})
+	respPayload := bytes.Join(
+		[][]byte{[]byte(statusLine), hdr2str(resp.Header), data},
+		[]byte{'\r', '\n'},
+	)
 	if werr := h.writeWARCRecord("response", resp.Request.URL.String(), respPayload); werr != nil {
 		return werr
 	}
