@@ -39,39 +39,11 @@ type rawOutlink struct {
 // GetLinks returns all the links found in a document. Currently only
 // parses HTML pages and CSS stylesheets.
 func GetLinks(resp *http.Response) ([]crawl.Outlink, error) {
-	var outlinks []rawOutlink
-
-	ctype := resp.Header.Get("Content-Type")
-	if strings.HasPrefix(ctype, "text/html") {
-		// Use goquery to extract links from the parsed HTML
-		// contents (query patterns are described in the
-		// linkMatches table).
-		doc, err := goquery.NewDocumentFromResponse(resp)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, lm := range linkMatches {
-			doc.Find(fmt.Sprintf("%s[%s]", lm.tag, lm.attr)).Each(func(i int, s *goquery.Selection) {
-				val, _ := s.Attr(lm.attr)
-				outlinks = append(outlinks, rawOutlink{URL: val, Tag: lm.linkTag})
-			})
-		}
-	} else if strings.HasPrefix(ctype, "text/css") {
-		// Use a simple (and actually quite bad) regular
-		// expression to extract "url()" links from CSS.
-		if data, err := ioutil.ReadAll(resp.Body); err == nil {
-			for _, val := range urlcssRx.FindAllStringSubmatch(string(data), -1) {
-				outlinks = append(outlinks, rawOutlink{URL: val[1], Tag: crawl.TagRelated})
-			}
-		}
-	}
-
 	// Parse outbound links relative to the request URI, and
 	// return unique results.
 	var result []crawl.Outlink
 	links := make(map[string]crawl.Outlink)
-	for _, l := range outlinks {
+	for _, l := range extractLinks(resp) {
 		// Skip data: URLs altogether.
 		if strings.HasPrefix(l.URL, "data:") {
 			continue
@@ -87,4 +59,47 @@ func GetLinks(resp *http.Response) ([]crawl.Outlink, error) {
 		result = append(result, l)
 	}
 	return result, nil
+}
+
+func extractLinks(resp *http.Response) []rawOutlink {
+	ctype := resp.Header.Get("Content-Type")
+	switch {
+	case strings.HasPrefix(ctype, "text/html"):
+		return extractLinksFromHTML(resp)
+	case strings.HasPrefix(ctype, "text/css"):
+		return extractLinksFromCSS(resp)
+	default:
+		return nil
+	}
+}
+
+func extractLinksFromHTML(resp *http.Response) []rawOutlink {
+	var outlinks []rawOutlink
+	// Use goquery to extract links from the parsed HTML
+	// contents (query patterns are described in the
+	// linkMatches table).
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil
+	}
+
+	for _, lm := range linkMatches {
+		doc.Find(fmt.Sprintf("%s[%s]", lm.tag, lm.attr)).Each(func(i int, s *goquery.Selection) {
+			val, _ := s.Attr(lm.attr)
+			outlinks = append(outlinks, rawOutlink{URL: val, Tag: lm.linkTag})
+		})
+	}
+	return outlinks
+}
+
+func extractLinksFromCSS(resp *http.Response) []rawOutlink {
+	// Use a simple (and actually quite bad) regular
+	// expression to extract "url()" links from CSS.
+	var outlinks []rawOutlink
+	if data, err := ioutil.ReadAll(resp.Body); err == nil {
+		for _, val := range urlcssRx.FindAllStringSubmatch(string(data), -1) {
+			outlinks = append(outlinks, rawOutlink{URL: val[1], Tag: crawl.TagRelated})
+		}
+	}
+	return outlinks
 }

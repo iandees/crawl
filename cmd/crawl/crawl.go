@@ -37,30 +37,24 @@ var (
 	cpuprofile = flag.String("cpuprofile", "", "create cpu profile")
 )
 
-func extractLinks(c *crawl.Crawler, u string, depth int, resp *http.Response, err error) error {
+func extractLinks(c *crawl.Crawler, u string, depth int, resp *http.Response, _ error) error {
 	links, err := analysis.GetLinks(resp)
 	if err != nil {
 		return err
 	}
 
 	for _, link := range links {
-		c.Enqueue(link, depth+1)
+		if err := c.Enqueue(link, depth+1); err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-type fakeCloser struct {
-	io.Reader
-}
-
-func (f *fakeCloser) Close() error {
-	return nil
-}
-
 func hdr2str(h http.Header) []byte {
 	var b bytes.Buffer
-	h.Write(&b)
+	h.Write(&b) // nolint
 	return b.Bytes()
 }
 
@@ -69,43 +63,58 @@ type warcSaveHandler struct {
 	warcInfoID string
 }
 
-func (h *warcSaveHandler) Handle(c *crawl.Crawler, u string, depth int, resp *http.Response, err error) error {
-	data, derr := ioutil.ReadAll(resp.Body)
-	if derr != nil {
+func (h *warcSaveHandler) writeWARCRecord(typ, uri string, data []byte) error {
+	hdr := warc.NewHeader()
+	hdr.Set("WARC-Type", typ)
+	hdr.Set("WARC-Target-URI", uri)
+	hdr.Set("WARC-Warcinfo-ID", h.warcInfoID)
+	hdr.Set("Content-Length", strconv.Itoa(len(data)))
+
+	w, err := h.warc.NewRecord(hdr)
+	if err != nil {
 		return err
 	}
-	resp.Body = &fakeCloser{bytes.NewReader(data)}
+	if _, err := w.Write(data); err != nil {
+		return err
+	}
+	return w.Close()
+}
 
-	// Dump the request.
+func (h *warcSaveHandler) Handle(c *crawl.Crawler, u string, depth int, resp *http.Response, err error) error {
+	if err != nil {
+		return err
+	}
+
+	// Read the response body (so we can save it to the WARC
+	// output) and replace it with a buffer.
+	data, derr := ioutil.ReadAll(resp.Body)
+	if derr != nil {
+		return derr
+	}
+	resp.Body = ioutil.NopCloser(bytes.NewReader(data))
+
+	// Dump the request to the WARC output.
 	var b bytes.Buffer
-	resp.Request.Write(&b)
-	hdr := warc.NewHeader()
-	hdr.Set("WARC-Type", "request")
-	hdr.Set("WARC-Target-URI", resp.Request.URL.String())
-	hdr.Set("WARC-Warcinfo-ID", h.warcInfoID)
-	hdr.Set("Content-Length", strconv.Itoa(b.Len()))
-	w := h.warc.NewRecord(hdr)
-	w.Write(b.Bytes())
-	w.Close()
+	if werr := resp.Request.Write(&b); werr != nil {
+		return werr
+	}
+	if werr := h.writeWARCRecord("request", resp.Request.URL.String(), b.Bytes()); werr != nil {
+		return werr
+	}
 
 	// Dump the response.
 	statusLine := fmt.Sprintf("HTTP/1.1 %s", resp.Status)
 	respPayload := bytes.Join([][]byte{
 		[]byte(statusLine), hdr2str(resp.Header), data},
 		[]byte{'\r', '\n'})
-	hdr = warc.NewHeader()
-	hdr.Set("WARC-Type", "response")
-	hdr.Set("WARC-Target-URI", resp.Request.URL.String())
-	hdr.Set("WARC-Warcinfo-ID", h.warcInfoID)
-	hdr.Set("Content-Length", strconv.Itoa(len(respPayload)))
-	w = h.warc.NewRecord(hdr)
-	w.Write(respPayload)
-	w.Close()
+	if werr := h.writeWARCRecord("response", resp.Request.URL.String(), respPayload); werr != nil {
+		return werr
+	}
 
 	return extractLinks(c, u, depth, resp, err)
 }
 
-func newWarcSaveHandler(w *warc.Writer) crawl.Handler {
+func newWarcSaveHandler(w *warc.Writer) (crawl.Handler, error) {
 	info := strings.Join([]string{
 		"Software: crawl/1.0\r\n",
 		"Format: WARC File Format 1.0\r\n",
@@ -116,13 +125,18 @@ func newWarcSaveHandler(w *warc.Writer) crawl.Handler {
 	hdr.Set("WARC-Type", "warcinfo")
 	hdr.Set("WARC-Warcinfo-ID", hdr.Get("WARC-Record-ID"))
 	hdr.Set("Content-Length", strconv.Itoa(len(info)))
-	hdrw := w.NewRecord(hdr)
-	io.WriteString(hdrw, info)
-	hdrw.Close()
+	hdrw, err := w.NewRecord(hdr)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := io.WriteString(hdrw, info); err != nil {
+		return nil, err
+	}
+	hdrw.Close() // nolint
 	return &warcSaveHandler{
 		warc:       w,
 		warcInfoID: hdr.Get("WARC-Record-ID"),
-	}
+	}, nil
 }
 
 type crawlStats struct {
@@ -149,7 +163,7 @@ func (c *crawlStats) Dump() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	rate := float64(c.bytes) / time.Since(c.start).Seconds() / 1000
-	fmt.Fprintf(os.Stderr, "stats: downloaded %d bytes (%.4g KB/s), status: %v\n", c.bytes, rate, c.states)
+	fmt.Fprintf(os.Stderr, "stats: downloaded %d bytes (%.4g KB/s), status: %v\n", c.bytes, rate, c.states) // nolint
 }
 
 var stats *crawlStats
@@ -201,11 +215,6 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	outf, err := os.Create(*outputFile)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	seeds := crawl.MustParseURLs(flag.Args())
 	scope := crawl.AND(
 		crawl.NewSchemeScope(strings.Split(*validSchemes, ",")),
@@ -217,10 +226,17 @@ func main() {
 		scope = crawl.OR(scope, crawl.NewIncludeRelatedScope())
 	}
 
+	outf, err := os.Create(*outputFile)
+	if err != nil {
+		log.Fatal(err)
+	}
 	w := warc.NewWriter(outf)
-	defer w.Close()
+	defer w.Close() // nolint
 
-	saver := newWarcSaveHandler(w)
+	saver, err := newWarcSaveHandler(w)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	crawler, err := crawl.NewCrawler(*dbPath, seeds, scope, crawl.FetcherFunc(fetch), crawl.NewRedirectHandler(saver))
 	if err != nil {
@@ -240,13 +256,12 @@ func main() {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 	crawler.Run(*concurrency)
-
 	crawler.Close()
 
 	if signaled.Load().(bool) {
 		os.Exit(1)
 	}
 	if !*keepDb {
-		os.RemoveAll(*dbPath)
+		os.RemoveAll(*dbPath) // nolint
 	}
 }

@@ -47,12 +47,17 @@ func (h Header) Get(key string) string {
 }
 
 // Encode the header to a Writer.
-func (h Header) Encode(w io.Writer) {
-	fmt.Fprintf(w, "%s\r\n", warcVersion)
-	for hdr, value := range h {
-		fmt.Fprintf(w, "%s: %s\r\n", hdr, value)
+func (h Header) Encode(w io.Writer) error {
+	if _, err := fmt.Fprintf(w, "%s\r\n", warcVersion); err != nil {
+		return err
 	}
-	fmt.Fprintf(w, "\r\n")
+	for hdr, value := range h {
+		if _, err := fmt.Fprintf(w, "%s: %s\r\n", hdr, value); err != nil {
+			return err
+		}
+	}
+	_, err := fmt.Fprintf(w, "\r\n")
+	return err
 }
 
 // NewHeader returns a Header with its own unique ID and the
@@ -80,26 +85,31 @@ type recordWriter struct {
 
 func (rw *recordWriter) Close() error {
 	// Add the end-of-record marker.
-	fmt.Fprintf(rw, "\r\n\r\n")
-
+	_, err := fmt.Fprintf(rw, "\r\n\r\n")
 	<-rw.lockCh
-
-	return nil
+	return err
 }
 
 // NewRecord starts a new WARC record with the provided header. The
 // caller must call Close on the returned writer before creating the
 // next record. Note that this function may block until that condition
-// is satisfied.
-func (w *Writer) NewRecord(hdr Header) io.WriteCloser {
+// is satisfied. If this function returns an error, the state of the
+// Writer is invalid and it should no longer be used.
+func (w *Writer) NewRecord(hdr Header) (io.WriteCloser, error) {
 	w.lockCh <- true
 	if w.gzwriter != nil {
-		w.gzwriter.Close()
+		w.gzwriter.Close() // nolint
 	}
-	w.gzwriter, _ = gzip.NewWriterLevel(w.writer, gzip.BestCompression)
+	var err error
+	w.gzwriter, err = gzip.NewWriterLevel(w.writer, gzip.BestCompression)
+	if err != nil {
+		return nil, err
+	}
 	w.gzwriter.Header.Name = hdr.Get("WARC-Record-ID")
-	hdr.Encode(w.gzwriter)
-	return &recordWriter{Writer: w.gzwriter, lockCh: w.lockCh}
+	if err = hdr.Encode(w.gzwriter); err != nil {
+		return nil, err
+	}
+	return &recordWriter{Writer: w.gzwriter, lockCh: w.lockCh}, nil
 }
 
 // Close the WARC writer and flush all buffers. This will also call

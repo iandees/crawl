@@ -144,10 +144,10 @@ type Crawler struct {
 }
 
 // Enqueue a (possibly new) URL for processing.
-func (c *Crawler) Enqueue(link Outlink, depth int) {
+func (c *Crawler) Enqueue(link Outlink, depth int) error {
 	// See if it's in scope.
 	if !c.scope.Check(link, depth) {
-		return
+		return nil
 	}
 
 	// Normalize the URL.
@@ -161,16 +161,20 @@ func (c *Crawler) Enqueue(link Outlink, depth int) {
 	var info URLInfo
 	ukey := []byte(fmt.Sprintf("url/%s", urlStr))
 	if err := c.db.GetObj(ukey, &info); err == nil {
-		return
+		return nil
 	}
 
 	// Store the URL in the queue, and store an empty URLInfo to
 	// make sure that subsequent calls to Enqueue with the same
 	// URL will fail.
 	wb := new(leveldb.Batch)
-	c.queue.Add(wb, urlStr, depth, time.Now())
-	c.db.PutObjBatch(wb, ukey, &info)
-	c.db.Write(wb, nil)
+	if err := c.queue.Add(wb, urlStr, depth, time.Now()); err != nil {
+		return err
+	}
+	if err := c.db.PutObjBatch(wb, ukey, &info); err != nil {
+		return err
+	}
+	return c.db.Write(wb, nil)
 }
 
 var scanInterval = 1 * time.Second
@@ -210,7 +214,7 @@ func (c *Crawler) urlHandler(queue <-chan queuePair) {
 		// Ignore errors, we can work with an empty object.
 		urlkey := []byte(fmt.Sprintf("url/%s", p.URL))
 		var info URLInfo
-		c.db.GetObj(urlkey, &info)
+		c.db.GetObj(urlkey, &info) // nolint
 		info.CrawledAt = time.Now()
 		info.URL = p.URL
 
@@ -230,18 +234,17 @@ func (c *Crawler) urlHandler(queue <-chan queuePair) {
 
 		wb := new(leveldb.Batch)
 		if httpErr == nil {
-			respBody.Close()
+			respBody.Close() // nolint
 
 			// Remove the URL from the queue if the fetcher was successful.
 			c.queue.Release(wb, p)
 		} else {
 			log.Printf("error retrieving %s: %v", p.URL, httpErr)
-			c.queue.Retry(wb, p, 300*time.Second)
+			Must(c.queue.Retry(wb, p, 300*time.Second))
 		}
 
-		c.db.PutObjBatch(wb, urlkey, &info)
-
-		c.db.Write(wb, nil)
+		Must(c.db.PutObjBatch(wb, urlkey, &info))
+		Must(c.db.Write(wb, nil))
 	}
 }
 
@@ -279,7 +282,9 @@ func NewCrawler(path string, seeds []*url.URL, scope Scope, f Fetcher, h Handler
 	c.stopping.Store(false)
 
 	// Recover active tasks.
-	c.queue.Recover()
+	if err := c.queue.Recover(); err != nil {
+		return nil, err
+	}
 
 	return c, nil
 }
@@ -289,7 +294,7 @@ func NewCrawler(path string, seeds []*url.URL, scope Scope, f Fetcher, h Handler
 func (c *Crawler) Run(concurrency int) {
 	// Load initial seeds into the queue.
 	for _, u := range c.seeds {
-		c.Enqueue(Outlink{URL: u, Tag: TagPrimary}, 0)
+		Must(c.Enqueue(Outlink{URL: u, Tag: TagPrimary}, 0))
 	}
 
 	// Start some runners and wait until they're done.
@@ -313,7 +318,7 @@ func (c *Crawler) Stop() {
 
 // Close the database and release resources associated with the crawler state.
 func (c *Crawler) Close() {
-	c.db.Close()
+	c.db.Close() // nolint
 }
 
 type redirectHandler struct {
@@ -330,11 +335,11 @@ func (wrap *redirectHandler) Handle(c *Crawler, u string, depth int, resp *http.
 	} else if resp.StatusCode > 300 && resp.StatusCode < 400 {
 		location := resp.Header.Get("Location")
 		if location != "" {
-			locationURL, err := resp.Request.URL.Parse(location)
-			if err != nil {
-				log.Printf("error parsing Location header: %v", err)
+			locationURL, uerr := resp.Request.URL.Parse(location)
+			if uerr != nil {
+				log.Printf("error parsing Location header: %v", uerr)
 			} else {
-				c.Enqueue(Outlink{URL: locationURL, Tag: TagPrimary}, depth+1)
+				Must(c.Enqueue(Outlink{URL: locationURL, Tag: TagPrimary}, depth+1))
 			}
 		}
 	} else {
@@ -347,4 +352,12 @@ func (wrap *redirectHandler) Handle(c *Crawler, u string, depth int, resp *http.
 // and will call the wrapped handler on every request with HTTP status 200.
 func NewRedirectHandler(wrap Handler) Handler {
 	return &redirectHandler{wrap}
+}
+
+// Must will abort the program with a message when we encounter an
+// error that we can't recover from.
+func Must(err error) {
+	if err != nil {
+		log.Fatalf("fatal error: %v", err)
+	}
 }
