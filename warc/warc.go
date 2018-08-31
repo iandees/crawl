@@ -3,6 +3,7 @@
 package warc
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"time"
@@ -73,9 +74,10 @@ func NewHeader() Header {
 // Writer can write records to a file in WARC format. It is safe
 // for concurrent access, since writes are serialized internally.
 type Writer struct {
-	writer   io.WriteCloser
-	gzwriter *gzip.Writer
-	lockCh   chan bool
+	writer    io.WriteCloser
+	bufwriter *bufio.Writer
+	gzwriter  *gzip.Writer
+	lockCh    chan bool
 }
 
 type recordWriter struct {
@@ -101,7 +103,7 @@ func (w *Writer) NewRecord(hdr Header) (io.WriteCloser, error) {
 		w.gzwriter.Close() // nolint
 	}
 	var err error
-	w.gzwriter, err = gzip.NewWriterLevel(w.writer, gzip.BestCompression)
+	w.gzwriter, err = gzip.NewWriterLevel(w.bufwriter, gzip.BestCompression)
 	if err != nil {
 		return nil, err
 	}
@@ -118,13 +120,17 @@ func (w *Writer) Close() error {
 	if err := w.gzwriter.Close(); err != nil {
 		return err
 	}
+	if err := w.bufwriter.Flush(); err != nil {
+		return err
+	}
 	return w.writer.Close()
 }
 
 // NewWriter initializes a new Writer and returns it.
 func NewWriter(w io.WriteCloser) *Writer {
 	return &Writer{
-		writer: w,
+		writer:    w,
+		bufwriter: bufio.NewWriter(w),
 		// Buffering is important here since we're using this
 		// channel as a semaphore.
 		lockCh: make(chan bool, 1),
