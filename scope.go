@@ -115,19 +115,21 @@ func (s *regexpIgnoreScope) Check(link Outlink, depth int) bool {
 	return true
 }
 
+func compileDefaultIgnorePatterns() []*regexp.Regexp {
+	out := make([]*regexp.Regexp, 0, len(defaultIgnorePatterns))
+	for _, p := range defaultIgnorePatterns {
+		out = append(out, regexp.MustCompile(p))
+	}
+	return out
+}
+
 // NewRegexpIgnoreScope returns a Scope that filters out URLs
 // according to a list of regular expressions.
-func NewRegexpIgnoreScope(ignores []string) Scope {
-	if ignores == nil {
-		ignores = defaultIgnorePatterns
+func NewRegexpIgnoreScope(ignores []*regexp.Regexp) Scope {
+	ignores = append(compileDefaultIgnorePatterns(), ignores...)
+	return &regexpIgnoreScope{
+		ignores: ignores,
 	}
-	r := regexpIgnoreScope{
-		ignores: make([]*regexp.Regexp, 0, len(ignores)),
-	}
-	for _, i := range ignores {
-		r.ignores = append(r.ignores, regexp.MustCompile(i))
-	}
-	return &r
 }
 
 // NewIncludeRelatedScope always includes resources with TagRelated.

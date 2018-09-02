@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"flag"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"regexp"
 	"runtime/pprof"
 	"strconv"
 	"strings"
@@ -33,9 +35,51 @@ var (
 	validSchemes   = flag.String("schemes", "http,https", "comma-separated list of allowed protocols")
 	excludeRelated = flag.Bool("exclude-related", false, "include related resources (css, images, etc) only if their URL is in scope")
 	outputFile     = flag.String("output", "crawl.warc.gz", "output WARC file")
+	cpuprofile     = flag.String("cpuprofile", "", "create cpu profile")
 
-	cpuprofile = flag.String("cpuprofile", "", "create cpu profile")
+	excludes []*regexp.Regexp
 )
+
+func init() {
+	flag.Var(&excludesFlag{}, "exclude", "exclude regex URL patterns")
+	flag.Var(&excludesFileFlag{}, "exclude-from-file", "load exclude regex URL patterns from a file")
+}
+
+type excludesFlag struct{}
+
+func (f *excludesFlag) String() string { return "" }
+
+func (f *excludesFlag) Set(s string) error {
+	rx, err := regexp.Compile(s)
+	if err != nil {
+		return err
+	}
+	excludes = append(excludes, rx)
+	return nil
+}
+
+type excludesFileFlag struct{}
+
+func (f *excludesFileFlag) String() string { return "" }
+
+func (f *excludesFileFlag) Set(s string) error {
+	ff, err := os.Open(s)
+	if err != nil {
+		return err
+	}
+	defer ff.Close() // nolint
+	var lineNum int
+	scanner := bufio.NewScanner(ff)
+	for scanner.Scan() {
+		lineNum++
+		rx, err := regexp.Compile(scanner.Text())
+		if err != nil {
+			return fmt.Errorf("%s, line %d: %v", s, lineNum, err)
+		}
+		excludes = append(excludes, rx)
+	}
+	return nil
+}
 
 func extractLinks(c *crawl.Crawler, u string, depth int, resp *http.Response, _ error) error {
 	links, err := analysis.GetLinks(resp)
@@ -221,7 +265,7 @@ func main() {
 		crawl.NewSchemeScope(strings.Split(*validSchemes, ",")),
 		crawl.NewDepthScope(*depth),
 		crawl.NewSeedScope(seeds),
-		crawl.NewRegexpIgnoreScope(nil),
+		crawl.NewRegexpIgnoreScope(excludes),
 	)
 	if !*excludeRelated {
 		scope = crawl.OR(scope, crawl.NewIncludeRelatedScope())
