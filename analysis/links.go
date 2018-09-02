@@ -27,6 +27,8 @@ var (
 		{"img", "src", crawl.TagRelated},
 		{"script", "src", crawl.TagRelated},
 		{"iframe", "src", crawl.TagRelated},
+		{"source", "src", crawl.TagRelated},
+		{"object", "data", crawl.TagRelated},
 	}
 )
 
