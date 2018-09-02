@@ -29,8 +29,8 @@ as arguments on the command line:
     $ crawl http://example.com/
 
 By default, the tool will store the output WARC file and its own
-database in the current directory. This can be controlled with the
-*--output* and *--state* command-line options.
+temporary crawl database in the current directory. This can be
+controlled with the *--output* and *--state* command-line options.
 
 The crawling scope is controlled with a set of overlapping checks:
 
@@ -44,6 +44,29 @@ The crawling scope is controlled with a set of overlapping checks:
 
 If the program is interrupted, running it again with the same command
 line from the same directory will cause it to resume crawling from
-where it stopped. At the end of a successful crawl, the database will
-be removed (unless you specify the *--keep* option, for debugging
-purposes).
+where it stopped. At the end of a successful crawl, the temporary
+crawl database will be removed (unless you specify the *--keep*
+option, for debugging purposes).
+
+It is possible to tell the crawler to exclude URLs matching specific
+regex patterns by using the *--exclude* or *--exclude-from-file*
+options. These option may be repeated multiple times. The crawler
+comes with its own builtin set of URI regular expressions meant to
+avoid calendars, admin panels of common CMS applications, and other
+well-known pitfalls. This list is sourced from the
+[ArchiveBot](https://github.com/ArchiveTeam/ArchiveBot) project.
+
+## Limitations
+
+Like most crawlers, this one has a number of limitations:
+
+* it completely ignores *robots.txt*. You can make such policy
+  decisions yourself by turning the robots.txt into a list of patterns
+  to be used with *--exclude-file*.
+* it does not embed a Javascript engine, so Javascript-rendered
+  elements will not be detected.
+* CSS parsing is limited (uses regular expressions), so some *url()*
+  resources might not be detected.
+* it expects reasonably well-formed HTML, so it may fail to extract
+  links from particularly broken pages.
+* support for \<object\> and \<video\> tags is limited.
