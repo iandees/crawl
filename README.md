@@ -62,7 +62,7 @@ Like most crawlers, this one has a number of limitations:
 
 * it completely ignores *robots.txt*. You can make such policy
   decisions yourself by turning the robots.txt into a list of patterns
-  to be used with *--exclude-file*.
+  to be used with *--exclude-from-file*.
 * it does not embed a Javascript engine, so Javascript-rendered
   elements will not be detected.
 * CSS parsing is limited (uses regular expressions), so some *url()*
