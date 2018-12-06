@@ -268,7 +268,7 @@ func main() {
 		crawl.NewRegexpIgnoreScope(excludes),
 	)
 	if !*excludeRelated {
-		scope = crawl.OR(scope, crawl.NewIncludeRelatedScope())
+		scope = crawl.AND(crawl.OR(scope, crawl.NewIncludeRelatedScope()), crawl.NewRegexpIgnoreScope(excludes))
 	}
 
 	outf, err := os.Create(*outputFile)
