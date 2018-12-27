@@ -150,15 +150,28 @@ type Crawler struct {
 	enqueueMx sync.Mutex
 }
 
+func normalizeURL(u *url.URL) *url.URL {
+	urlStr := purell.NormalizeURL(u,
+		purell.FlagsSafe|purell.FlagRemoveDotSegments|purell.FlagRemoveDuplicateSlashes|
+			purell.FlagRemoveFragment|purell.FlagSortQuery)
+	u2, err := url.Parse(urlStr)
+	if err != nil {
+		// We *really* do not expect an error here.
+		panic(err)
+	}
+	return u2
+}
+
 // Enqueue a (possibly new) URL for processing.
 func (c *Crawler) Enqueue(link Outlink, depth int) error {
+	// Normalize the URL. We are going to replace link.URL in-place, to
+	// ensure that scope checks are applied to the normalized URL.
+	link.URL = normalizeURL(link.URL)
+
 	// See if it's in scope.
 	if !c.scope.Check(link, depth) {
 		return nil
 	}
-
-	// Normalize the URL.
-	urlStr := purell.NormalizeURL(link.URL, purell.FlagsSafe|purell.FlagRemoveDotSegments|purell.FlagRemoveDuplicateSlashes|purell.FlagRemoveFragment|purell.FlagSortQuery)
 
 	// Protect the read-modify-update below with a mutex.
 	c.enqueueMx.Lock()
@@ -166,7 +179,7 @@ func (c *Crawler) Enqueue(link Outlink, depth int) error {
 
 	// Check if we've already seen it.
 	var info URLInfo
-	ukey := []byte(fmt.Sprintf("url/%s", urlStr))
+	ukey := []byte(fmt.Sprintf("url/%s", link.URL.String()))
 	if err := c.db.GetObj(ukey, &info); err == nil {
 		return nil
 	}
@@ -175,7 +188,7 @@ func (c *Crawler) Enqueue(link Outlink, depth int) error {
 	// make sure that subsequent calls to Enqueue with the same
 	// URL will fail.
 	wb := new(leveldb.Batch)
-	if err := c.queue.Add(wb, urlStr, depth, time.Now()); err != nil {
+	if err := c.queue.Add(wb, link.URL.String(), depth, time.Now()); err != nil {
 		return err
 	}
 	if err := c.db.PutObjBatch(wb, ukey, &info); err != nil {
