@@ -56,6 +56,15 @@ avoid calendars, admin panels of common CMS applications, and other
 well-known pitfalls. This list is sourced from the
 [ArchiveBot](https://github.com/ArchiveTeam/ArchiveBot) project.
 
+If you're running a larger crawl, the tool can be told to rotate the
+output WARC files when they reach a certain size (100MB by default,
+controlled by the *--output-max-size* flag. To do so, make sure the
+*--output* option contains somewhere the literal token `%s`, which
+will be replaced by a unique identifier every time a new file is
+created, e.g.:
+
+    $ crawl --output=out-%s.warc.gz http://example.com/
+
 ## Limitations
 
 Like most crawlers, this one has a number of limitations:

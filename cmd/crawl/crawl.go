@@ -34,7 +34,8 @@ var (
 	depth          = flag.Int("depth", 100, "maximum link depth")
 	validSchemes   = flag.String("schemes", "http,https", "comma-separated list of allowed protocols")
 	excludeRelated = flag.Bool("exclude-related", false, "include related resources (css, images, etc) only if their URL is in scope")
-	outputFile     = flag.String("output", "crawl.warc.gz", "output WARC file")
+	outputFile     = flag.String("output", "crawl.warc.gz", "output WARC file or pattern (patterns must include a \"%s\" literal token)")
+	warcFileSizeMB = flag.Int("output-max-size", 100, "maximum output WARC file size (in MB) when using patterns")
 	cpuprofile     = flag.String("cpuprofile", "", "create cpu profile")
 
 	excludes []*regexp.Regexp
@@ -63,7 +64,7 @@ type excludesFileFlag struct{}
 func (f *excludesFileFlag) String() string { return "" }
 
 func (f *excludesFileFlag) Set(s string) error {
-	ff, err := os.Open(s)
+	ff, err := os.Open(s) // #nosec
 	if err != nil {
 		return err
 	}
@@ -246,6 +247,19 @@ func (b *byteCounter) Read(buf []byte) (int, error) {
 	return n, err
 }
 
+func warcWriterFromFlags() (w *warc.Writer, err error) {
+	if strings.Contains(*outputFile, "%s") {
+		w, err = warc.NewMultiWriter(*outputFile, uint64(*warcFileSizeMB)*1024*1024)
+	} else {
+		var f *os.File
+		f, err = os.Create(*outputFile)
+		if err == nil {
+			w = warc.NewWriter(f)
+		}
+	}
+	return
+}
+
 func main() {
 	flag.Parse()
 
@@ -271,11 +285,10 @@ func main() {
 		scope = crawl.AND(crawl.OR(scope, crawl.NewIncludeRelatedScope()), crawl.NewRegexpIgnoreScope(excludes))
 	}
 
-	outf, err := os.Create(*outputFile)
+	w, err := warcWriterFromFlags()
 	if err != nil {
 		log.Fatal(err)
 	}
-	w := warc.NewWriter(outf)
 	defer w.Close() // nolint
 
 	saver, err := newWarcSaveHandler(w)
