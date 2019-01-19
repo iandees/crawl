@@ -92,14 +92,6 @@ const (
 	TagRelated
 )
 
-// URLInfo stores information about a crawled URL.
-type URLInfo struct {
-	URL        string
-	StatusCode int
-	CrawledAt  time.Time
-	Error      string
-}
-
 // A Fetcher retrieves contents from remote URLs.
 type Fetcher interface {
 	// Fetch retrieves a URL and returns the response.
@@ -162,6 +154,19 @@ func normalizeURL(u *url.URL) *url.URL {
 	return u2
 }
 
+func seenKey(u *url.URL) []byte {
+	return []byte(fmt.Sprintf("_seen/%s", u.String()))
+}
+
+func (c *Crawler) hasSeen(u *url.URL) bool {
+	_, err := c.db.Get(seenKey(u), nil)
+	return err == nil
+}
+
+func (c *Crawler) setSeen(wb *leveldb.Batch, u *url.URL) {
+	wb.Put(seenKey(u), []byte{})
+}
+
 // Enqueue a (possibly new) URL for processing.
 func (c *Crawler) Enqueue(link Outlink, depth int) error {
 	// Normalize the URL. We are going to replace link.URL in-place, to
@@ -178,22 +183,18 @@ func (c *Crawler) Enqueue(link Outlink, depth int) error {
 	defer c.enqueueMx.Unlock()
 
 	// Check if we've already seen it.
-	var info URLInfo
-	ukey := []byte(fmt.Sprintf("url/%s", link.URL.String()))
-	if err := c.db.GetObj(ukey, &info); err == nil {
+	if c.hasSeen(link.URL) {
 		return nil
 	}
 
-	// Store the URL in the queue, and store an empty URLInfo to
-	// make sure that subsequent calls to Enqueue with the same
-	// URL will fail.
+	// Store the URL in the queue, and mark it as seen to make
+	// sure that subsequent calls to Enqueue with the same URL
+	// will fail.
 	wb := new(leveldb.Batch)
 	if err := c.queue.Add(wb, link.URL.String(), depth, time.Now()); err != nil {
 		return err
 	}
-	if err := c.db.PutObjBatch(wb, ukey, &info); err != nil {
-		return err
-	}
+	c.setSeen(wb, link.URL)
 	return c.db.Write(wb, nil)
 }
 
@@ -230,14 +231,6 @@ func (c *Crawler) urlHandler(queue <-chan queuePair) {
 			return
 		}
 
-		// Retrieve the URLInfo object from the crawl db.
-		// Ignore errors, we can work with an empty object.
-		urlkey := []byte(fmt.Sprintf("url/%s", p.URL))
-		var info URLInfo
-		c.db.GetObj(urlkey, &info) // nolint
-		info.CrawledAt = time.Now()
-		info.URL = p.URL
-
 		// Fetch the URL and handle it. Make sure to Close the
 		// response body (even if it gets replaced in the
 		// Response object).
@@ -246,7 +239,6 @@ func (c *Crawler) urlHandler(queue <-chan queuePair) {
 		var respBody io.ReadCloser
 		if httpErr == nil {
 			respBody = httpResp.Body
-			info.StatusCode = httpResp.StatusCode
 		}
 
 		// Invoke the handler (even if the fetcher errored
@@ -268,7 +260,6 @@ func (c *Crawler) urlHandler(queue <-chan queuePair) {
 		}
 
 		// Write the result in our database.
-		Must(c.db.PutObjBatch(wb, urlkey, &info))
 		Must(c.db.Write(wb, nil))
 	}
 }
