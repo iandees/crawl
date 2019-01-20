@@ -112,20 +112,26 @@ func (f FetcherFunc) Fetch(u string) (*http.Response, error) {
 // unless the handler returns the special error ErrRetryRequest.
 type Handler interface {
 	// Handle the response from a URL.
-	Handle(*Crawler, string, int, *http.Response, error) error
+	Handle(Publisher, string, int, *http.Response, error) error
 }
 
 // HandlerFunc wraps a function into the Handler interface.
-type HandlerFunc func(*Crawler, string, int, *http.Response, error) error
+type HandlerFunc func(Publisher, string, int, *http.Response, error) error
 
 // Handle the response from a URL.
-func (f HandlerFunc) Handle(db *Crawler, u string, depth int, resp *http.Response, err error) error {
-	return f(db, u, depth, resp, err)
+func (f HandlerFunc) Handle(p Publisher, u string, depth int, resp *http.Response, err error) error {
+	return f(p, u, depth, resp, err)
 }
 
 // ErrRetryRequest is returned by a Handler when the request should be
 // retried after some time.
 var ErrRetryRequest = errors.New("retry_request")
+
+// Publisher is an interface to something with an Enqueue() method to
+// add new potential URLs to crawl.
+type Publisher interface {
+	Enqueue(Outlink, int) error
+}
 
 // The Crawler object contains the crawler state.
 type Crawler struct {
@@ -341,8 +347,8 @@ func (c *Crawler) Close() {
 // and adds them to the queue for crawling. It will call the wrapped
 // handler on all requests regardless.
 func FollowRedirects(wrap Handler) Handler {
-	return HandlerFunc(func(c *Crawler, u string, depth int, resp *http.Response, err error) error {
-		if herr := wrap.Handle(c, u, depth, resp, err); herr != nil {
+	return HandlerFunc(func(p Publisher, u string, depth int, resp *http.Response, err error) error {
+		if herr := wrap.Handle(p, u, depth, resp, err); herr != nil {
 			return herr
 		}
 
@@ -356,7 +362,7 @@ func FollowRedirects(wrap Handler) Handler {
 			if uerr != nil {
 				log.Printf("error parsing Location header: %v", uerr)
 			} else {
-				return c.Enqueue(Outlink{URL: locationURL, Tag: TagPrimary}, depth+1)
+				return p.Enqueue(Outlink{URL: locationURL, Tag: TagPrimary}, depth+1)
 			}
 		}
 		return nil
@@ -367,14 +373,14 @@ func FollowRedirects(wrap Handler) Handler {
 // "successful" HTTP status code (anything < 400). When using this
 // wrapper, subsequent Handle calls will always have err set to nil.
 func FilterErrors(wrap Handler) Handler {
-	return HandlerFunc(func(c *Crawler, u string, depth int, resp *http.Response, err error) error {
+	return HandlerFunc(func(p Publisher, u string, depth int, resp *http.Response, err error) error {
 		if err != nil {
 			return nil
 		}
 		if resp.StatusCode >= 400 {
 			return nil
 		}
-		return wrap.Handle(c, u, depth, resp, nil)
+		return wrap.Handle(p, u, depth, resp, nil)
 	})
 }
 
@@ -382,11 +388,11 @@ func FilterErrors(wrap Handler) Handler {
 // temporary errors (all transport-level errors are considered
 // temporary, as well as any HTTP status code >= 500).
 func HandleRetries(wrap Handler) Handler {
-	return HandlerFunc(func(c *Crawler, u string, depth int, resp *http.Response, err error) error {
+	return HandlerFunc(func(p Publisher, u string, depth int, resp *http.Response, err error) error {
 		if err != nil || resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
 			return ErrRetryRequest
 		}
-		return wrap.Handle(c, u, depth, resp, nil)
+		return wrap.Handle(p, u, depth, resp, nil)
 	})
 }
 

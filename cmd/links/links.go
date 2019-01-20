@@ -20,7 +20,7 @@ var (
 	validSchemes = flag.String("schemes", "http,https", "comma-separated list of allowed protocols")
 )
 
-func extractLinks(c *crawl.Crawler, u string, depth int, resp *http.Response, _ error) error {
+func extractLinks(p crawl.Publisher, u string, depth int, resp *http.Response, _ error) error {
 	links, err := analysis.GetLinks(resp)
 	if err != nil {
 		// Not a fatal error, just a bad web page.
@@ -28,7 +28,7 @@ func extractLinks(c *crawl.Crawler, u string, depth int, resp *http.Response, _ 
 	}
 
 	for _, link := range links {
-		if err := c.Enqueue(link, depth+1); err != nil {
+		if err := p.Enqueue(link, depth+1); err != nil {
 			return err
 		}
 	}

@@ -82,7 +82,7 @@ func (f *excludesFileFlag) Set(s string) error {
 	return nil
 }
 
-func extractLinks(c *crawl.Crawler, u string, depth int, resp *http.Response, _ error) error {
+func extractLinks(p crawl.Publisher, u string, depth int, resp *http.Response, _ error) error {
 	links, err := analysis.GetLinks(resp)
 	if err != nil {
 		// This is not a fatal error, just a bad web page.
@@ -90,7 +90,7 @@ func extractLinks(c *crawl.Crawler, u string, depth int, resp *http.Response, _ 
 	}
 
 	for _, link := range links {
-		if err := c.Enqueue(link, depth+1); err != nil {
+		if err := p.Enqueue(link, depth+1); err != nil {
 			return err
 		}
 	}
@@ -127,7 +127,7 @@ func (h *warcSaveHandler) writeWARCRecord(typ, uri string, data []byte) error {
 	return w.Close()
 }
 
-func (h *warcSaveHandler) Handle(c *crawl.Crawler, u string, depth int, resp *http.Response, _ error) error {
+func (h *warcSaveHandler) Handle(p crawl.Publisher, u string, depth int, resp *http.Response, _ error) error {
 	// Read the response body (so we can save it to the WARC
 	// output) and replace it with a buffer.
 	data, derr := ioutil.ReadAll(resp.Body)
@@ -157,7 +157,7 @@ func (h *warcSaveHandler) Handle(c *crawl.Crawler, u string, depth int, resp *ht
 
 	h.numWritten++
 
-	return extractLinks(c, u, depth, resp, nil)
+	return extractLinks(p, u, depth, resp, nil)
 }
 
 func newWarcSaveHandler(w *warc.Writer) (crawl.Handler, error) {
