@@ -33,6 +33,36 @@
 			"revisionTime": "2019-09-04T06:34:54Z"
 		},
 		{
+			"checksumSHA1": "T202gGG48fSwWZ2YrnYr/j2Y6RQ=",
+			"path": "github.com/google/go-cmp/cmp",
+			"revision": "b1c9c4891a6525d98001fea424c8926c6d77bb56",
+			"revisionTime": "2019-08-29T22:54:27Z"
+		},
+		{
+			"checksumSHA1": "FUnTgtE5i3f8asIvicGkJSFlrts=",
+			"path": "github.com/google/go-cmp/cmp/internal/diff",
+			"revision": "b1c9c4891a6525d98001fea424c8926c6d77bb56",
+			"revisionTime": "2019-08-29T22:54:27Z"
+		},
+		{
+			"checksumSHA1": "nR8EJ8i8lqxxmtLPnXI7WlYANiE=",
+			"path": "github.com/google/go-cmp/cmp/internal/flags",
+			"revision": "b1c9c4891a6525d98001fea424c8926c6d77bb56",
+			"revisionTime": "2019-08-29T22:54:27Z"
+		},
+		{
+			"checksumSHA1": "0pcLJsUQUaBdPXM5LuL9uFeuETs=",
+			"path": "github.com/google/go-cmp/cmp/internal/function",
+			"revision": "b1c9c4891a6525d98001fea424c8926c6d77bb56",
+			"revisionTime": "2019-08-29T22:54:27Z"
+		},
+		{
+			"checksumSHA1": "zQxhgAvWmYtrTZjxRenQQYiDX50=",
+			"path": "github.com/google/go-cmp/cmp/internal/value",
+			"revision": "b1c9c4891a6525d98001fea424c8926c6d77bb56",
+			"revisionTime": "2019-08-29T22:54:27Z"
+		},
+		{
 			"checksumSHA1": "RFpz1DEQgszjgy3cK7pg52cgXn8=",
 			"path": "github.com/pborman/uuid",
 			"revision": "e533369306653d193b93dae055f6083cbf8ba54f",
