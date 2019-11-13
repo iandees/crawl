@@ -79,3 +79,8 @@ Like most crawlers, this one has a number of limitations:
 * it expects reasonably well-formed HTML, so it may fail to extract
   links from particularly broken pages.
 * support for \<object\> and \<video\> tags is limited.
+
+# Contact
+
+Send bugs and patches to ale@incal.net.
+
