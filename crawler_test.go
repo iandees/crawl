@@ -33,7 +33,7 @@ func TestCrawler(t *testing.T) {
 	)
 
 	var crawledPages int
-	h := HandlerFunc(func(p Publisher, u string, depth int, resp *http.Response, err error) error {
+	h := HandlerFunc(func(p Publisher, u string, tag, depth int, resp *http.Response, err error) error {
 		crawledPages++
 		next := fmt.Sprintf(srv.URL+"/page/%d", crawledPages)
 		log.Printf("%s -> %s", u, next)

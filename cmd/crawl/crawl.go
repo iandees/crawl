@@ -33,7 +33,7 @@ var (
 	concurrency    = flag.Int("c", 10, "concurrent workers")
 	depth          = flag.Int("depth", 100, "maximum link depth")
 	validSchemes   = flag.String("schemes", "http,https", "comma-separated list of allowed protocols")
-	excludeRelated = flag.Bool("exclude-related", false, "include related resources (css, images, etc) only if their URL is in scope")
+	excludeRelated = flag.Bool("exclude-related", false, "do not include related resources (css, images, etc) if their URL is not in scope")
 	outputFile     = flag.String("output", "crawl.warc.gz", "output WARC file or pattern (patterns must include a \"%s\" literal token)")
 	warcFileSizeMB = flag.Int("output-max-size", 100, "maximum output WARC file size (in MB) when using patterns")
 	cpuprofile     = flag.String("cpuprofile", "", "create cpu profile")
@@ -127,7 +127,7 @@ func (h *warcSaveHandler) writeWARCRecord(typ, uri string, data []byte) error {
 	return w.Close()
 }
 
-func (h *warcSaveHandler) Handle(p crawl.Publisher, u string, depth int, resp *http.Response, _ error) error {
+func (h *warcSaveHandler) Handle(p crawl.Publisher, u string, tag, depth int, resp *http.Response, _ error) error {
 	// Read the response body (so we can save it to the WARC
 	// output) and replace it with a buffer.
 	data, derr := ioutil.ReadAll(resp.Body)
