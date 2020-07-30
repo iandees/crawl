@@ -132,7 +132,9 @@ func (h *warcSaveHandler) Handle(p crawl.Publisher, u string, tag, depth int, re
 	// output) and replace it with a buffer.
 	data, derr := ioutil.ReadAll(resp.Body)
 	if derr != nil {
-		return derr
+		// Errors at this stage are usually transport-level errors,
+		// and as such, retriable.
+		return crawl.ErrRetryRequest
 	}
 	resp.Body = ioutil.NopCloser(bytes.NewReader(data))
 
