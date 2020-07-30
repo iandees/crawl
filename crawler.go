@@ -400,6 +400,6 @@ func HandleRetries(wrap Handler) Handler {
 // error that we can't recover from.
 func Must(err error) {
 	if err != nil {
-		log.Fatalf("fatal error: %v", err)
+		log.Panicf("fatal error: %v", err)
 	}
 }
