@@ -262,7 +262,7 @@ func (c *Crawler) urlHandler(queue <-chan queuePair) {
 		case ErrRetryRequest:
 			Must(c.queue.Retry(wb, p, errorRetryDelay))
 		default:
-			log.Fatalf("fatal error in handling %s: %v", p.URL, err)
+			log.Panicf("fatal error in handling %s: %v", p.URL, err)
 		}
 
 		// Write the result in our database.
