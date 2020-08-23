@@ -9,6 +9,6 @@ XS-Go-Import-Path: git.autistici.org/ale/crawl
 Package: crawl
 Architecture: any
 Built-Using: ${misc:Built-Using}
-Depends: ${shlib:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: Simple website crawler
  Simple website crawler that generates WARC files.

@@ -3,6 +3,7 @@
 
 export DH_GOPKG = git.autistici.org/ale/crawl
 export DH_GOLANG_EXCLUDES = vendor
+export DEB_BUILD_OPTIONS = nostrip
 
 %:
 	dh $@ --with=golang --buildsystem=golang
