@@ -42,7 +42,7 @@ var (
 	dnsMap   = dnsMapFlag(make(map[string]string))
 	excludes []*regexp.Regexp
 
-	httpClient *http.Client
+	httpClient = crawl.DefaultClient
 )
 
 func init() {
