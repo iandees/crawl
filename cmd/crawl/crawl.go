@@ -5,6 +5,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -38,12 +39,27 @@ var (
 	warcFileSizeMB = flag.Int("output-max-size", 100, "maximum output WARC file size (in MB) when using patterns")
 	cpuprofile     = flag.String("cpuprofile", "", "create cpu profile")
 
+	dnsMap   = dnsMapFlag(make(map[string]string))
 	excludes []*regexp.Regexp
+
+	httpClient *http.Client
 )
 
 func init() {
 	flag.Var(&excludesFlag{}, "exclude", "exclude regex URL patterns")
 	flag.Var(&excludesFileFlag{}, "exclude-from-file", "load exclude regex URL patterns from a file")
+	flag.Var(dnsMap, "resolve", "set DNS overrides (in hostname=addr format)")
+
+	stats = &crawlStats{
+		states: make(map[int]int),
+		start:  time.Now(),
+	}
+
+	go func() {
+		for range time.Tick(10 * time.Second) {
+			stats.Dump()
+		}
+	}()
 }
 
 type excludesFlag struct{}
@@ -79,6 +95,19 @@ func (f *excludesFileFlag) Set(s string) error {
 		}
 		excludes = append(excludes, rx)
 	}
+	return nil
+}
+
+type dnsMapFlag map[string]string
+
+func (f dnsMapFlag) String() string { return "" }
+
+func (f dnsMapFlag) Set(s string) error {
+	parts := strings.Split(s, "=")
+	if len(parts) != 2 {
+		return errors.New("value not in host=addr format")
+	}
+	f[parts[0]] = parts[1]
 	return nil
 }
 
@@ -217,24 +246,11 @@ func (c *crawlStats) Dump() {
 var stats *crawlStats
 
 func fetch(urlstr string) (*http.Response, error) {
-	resp, err := crawl.DefaultClient.Get(urlstr)
+	resp, err := httpClient.Get(urlstr)
 	if err == nil {
 		stats.Update(resp)
 	}
 	return resp, err
-}
-
-func init() {
-	stats = &crawlStats{
-		states: make(map[int]int),
-		start:  time.Now(),
-	}
-
-	go func() {
-		for range time.Tick(10 * time.Second) {
-			stats.Dump()
-		}
-	}()
 }
 
 type byteCounter struct {
@@ -297,6 +313,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	httpClient = crawl.NewHTTPClientWithDNSOverride(dnsMap)
 
 	crawler, err := crawl.NewCrawler(
 		*dbPath,
