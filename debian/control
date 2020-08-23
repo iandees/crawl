@@ -1,0 +1,14 @@
+Source: crawl
+Section: net
+Priority: extra
+Maintainer: ale <ale@incal.net>
+Build-Depends: debhelper (>= 11), dh-golang, golang-any (>= 1.11)
+Standards-Version: 4.1.3
+XS-Go-Import-Path: git.autistici.org/ale/crawl
+
+Package: crawl
+Architecture: any
+Built-Using: ${misc:Built-Using}
+Depends: ${shlib:Depends}, ${misc:Depends}
+Description: Simple website crawler
+ Simple website crawler that generates WARC files.
