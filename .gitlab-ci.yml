@@ -1,4 +1,4 @@
-include "https://git.autistici.org/ai3/build-deb/raw/master/ci-common.yml"
+include: "https://git.autistici.org/ai3/build-deb/raw/master/ci-common.yml"
 
 stages:
   - test
