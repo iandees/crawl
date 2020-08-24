@@ -1,6 +1,10 @@
+include "https://git.autistici.org/ai3/build-deb/raw/master/ci-common.yml"
 
 stages:
   - test
+  - build_pkgsrc
+  - build_pkg
+  - upload_pkg
 
 run_tests:
   stage: test
