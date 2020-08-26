@@ -1,4 +1,4 @@
-crawl (0.1) unstable; urgency=low
+warc-crawler (0.1) unstable; urgency=low
 
   * First packaged release.
 

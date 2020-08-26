@@ -1,4 +1,4 @@
-Source: crawl
+Source: warc-crawler
 Section: net
 Priority: extra
 Maintainer: ale <ale@incal.net>
@@ -6,7 +6,7 @@ Build-Depends: debhelper (>= 11), dh-golang, golang-any (>= 1.11)
 Standards-Version: 4.1.3
 XS-Go-Import-Path: git.autistici.org/ale/crawl
 
-Package: crawl
+Package: warc-crawler
 Architecture: any
 Built-Using: ${misc:Built-Using}
 Depends: ${shlibs:Depends}, ${misc:Depends}
