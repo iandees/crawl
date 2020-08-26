@@ -217,6 +217,7 @@ func newWarcSaveHandler(w *warc.Writer) (crawl.Handler, error) {
 }
 
 type crawlStats struct {
+	urls  int64
 	bytes int64
 	start time.Time
 
@@ -228,6 +229,7 @@ func (c *crawlStats) Update(resp *http.Response) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
+	c.urls++
 	c.states[resp.StatusCode]++
 	resp.Body = &byteCounter{resp.Body}
 }
@@ -240,7 +242,7 @@ func (c *crawlStats) Dump() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	rate := float64(c.bytes) / time.Since(c.start).Seconds() / 1000
-	fmt.Fprintf(os.Stderr, "stats: downloaded %d bytes (%.4g KB/s), status: %v\n", c.bytes, rate, c.states) // nolint
+	log.Printf("stats: downloaded %d urls, %d bytes (%.4g KB/s), status: %v", c.urls, c.bytes, rate, c.states) // nolint
 }
 
 var stats *crawlStats
@@ -279,6 +281,7 @@ func warcWriterFromFlags() (w *warc.Writer, err error) {
 }
 
 func main() {
+	log.SetFlags(0)
 	flag.Parse()
 
 	if *cpuprofile != "" {
