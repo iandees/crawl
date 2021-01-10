@@ -1,5 +1,7 @@
 module git.autistici.org/ale/crawl
 
+go 1.15
+
 require (
 	github.com/PuerkitoBio/goquery v1.5.0
 	github.com/PuerkitoBio/purell v0.0.0-20180310210909-975f53781597
