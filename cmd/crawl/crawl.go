@@ -38,6 +38,7 @@ var (
 	outputFile     = flag.String("output", "crawl.warc.gz", "output WARC file or pattern (patterns must include a \"%s\" literal token)")
 	warcFileSizeMB = flag.Int("output-max-size", 100, "maximum output WARC file size (in MB) when using patterns")
 	cpuprofile     = flag.String("cpuprofile", "", "create cpu profile")
+	onlyPrefixes   = flag.String("only-prefixes", "", "comma-separated list of allowed URL prefixes")
 
 	dnsMap   = dnsMapFlag(make(map[string]string))
 	excludes []*regexp.Regexp
@@ -296,10 +297,24 @@ func main() {
 	}
 
 	seeds := crawl.MustParseURLs(flag.Args())
+
+	prefixes := crawl.URLPrefixMap{}
+	if *onlyPrefixes != "" {
+		// If the user gives a list of URLs to allow as prefixes, use those
+		for _, u := range crawl.MustParseURLs(strings.Split(*onlyPrefixes, ",")) {
+			prefixes.Add(u)
+		}
+	} else {
+		// Otherwise use the seeds
+		for _, u := range seeds {
+			prefixes.Add(u)
+		}
+	}
+
 	scope := crawl.AND(
 		crawl.NewSchemeScope(strings.Split(*validSchemes, ",")),
 		crawl.NewDepthScope(*depth),
-		crawl.NewSeedScope(seeds),
+		crawl.NewURLPrefixScope(prefixes),
 		crawl.NewRegexpIgnoreScope(excludes),
 	)
 	if !*excludeRelated {
