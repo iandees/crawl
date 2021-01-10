@@ -243,9 +243,9 @@ func (c *Crawler) urlHandler(queue <-chan queuePair) {
 		httpResp, httpErr := c.fetcher.Fetch(p.URL)
 		var respBody io.ReadCloser
 		if httpErr == nil {
+			log.Printf("HTTP %d %s", httpResp.StatusCode, p.URL)
 			respBody = httpResp.Body
 		}
-		log.Printf("HTTP %d %s", httpResp.StatusCode, p.URL)
 
 		// Invoke the handler (even if the fetcher errored
 		// out). Errors in handling requests are fatal, crawl
