@@ -240,12 +240,12 @@ func (c *Crawler) urlHandler(queue <-chan queuePair) {
 		// Fetch the URL and handle it. Make sure to Close the
 		// response body (even if it gets replaced in the
 		// Response object).
-		fmt.Printf("%s\n", p.URL)
 		httpResp, httpErr := c.fetcher.Fetch(p.URL)
 		var respBody io.ReadCloser
 		if httpErr == nil {
 			respBody = httpResp.Body
 		}
+		log.Printf("HTTP %d %s", httpResp.StatusCode, p.URL)
 
 		// Invoke the handler (even if the fetcher errored
 		// out). Errors in handling requests are fatal, crawl
