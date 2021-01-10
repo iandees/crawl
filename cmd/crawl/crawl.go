@@ -12,6 +12,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"regexp"
@@ -39,6 +40,7 @@ var (
 	warcFileSizeMB = flag.Int("output-max-size", 100, "maximum output WARC file size (in MB) when using patterns")
 	cpuprofile     = flag.String("cpuprofile", "", "create cpu profile")
 	onlyPrefixes   = flag.String("only-prefixes", "", "comma-separated list of allowed URL prefixes")
+	inputFile      = flag.String("input-file", "", "path to a file with URLs to fetch")
 
 	dnsMap   = dnsMapFlag(make(map[string]string))
 	excludes []*regexp.Regexp
@@ -343,6 +345,32 @@ func main() {
 	)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if *inputFile != "" {
+		file, err := os.Open(*inputFile)
+		if err != nil {
+			log.Fatalf("Couldn't open input-file %s: %+v", *inputFile, err)
+		}
+		defer file.Close()
+
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			urlText := scanner.Text()
+			parsedURL, err := url.Parse(urlText)
+			if err != nil {
+				log.Fatalf("Couldn't parse URL %s: %+v", urlText, err)
+			}
+
+			err = crawler.Enqueue(crawl.Outlink{URL: parsedURL, Tag: crawl.TagPrimary}, 0)
+			if err != nil {
+				log.Fatalf("Couldn't enqueue URL %s: %+v", parsedURL, err)
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	// Set up signal handlers so we can terminate gently if possible.
