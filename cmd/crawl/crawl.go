@@ -347,32 +347,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if *inputFile != "" {
-		file, err := os.Open(*inputFile)
-		if err != nil {
-			log.Fatalf("Couldn't open input-file %s: %+v", *inputFile, err)
-		}
-		defer file.Close()
-
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			urlText := scanner.Text()
-			parsedURL, err := url.Parse(urlText)
-			if err != nil {
-				log.Fatalf("Couldn't parse URL %s: %+v", urlText, err)
-			}
-
-			err = crawler.Enqueue(crawl.Outlink{URL: parsedURL, Tag: crawl.TagPrimary}, 0)
-			if err != nil {
-				log.Fatalf("Couldn't enqueue URL %s: %+v", parsedURL, err)
-			}
-		}
-
-		if err := scanner.Err(); err != nil {
-			log.Fatal(err)
-		}
-	}
-
 	// Set up signal handlers so we can terminate gently if possible.
 	var signaled atomic.Value
 	signaled.Store(false)
@@ -384,6 +358,44 @@ func main() {
 		crawler.Stop()
 	}()
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+	if *inputFile != "" {
+		go func() {
+			file, err := os.Open(*inputFile)
+			if err != nil {
+				log.Fatalf("Couldn't open input-file %s: %+v", *inputFile, err)
+			}
+			defer file.Close()
+
+			scanner := bufio.NewScanner(file)
+			for scanner.Scan() {
+				urlText := scanner.Text()
+				parsedURL, err := url.Parse(urlText)
+				if err != nil {
+					log.Fatalf("Couldn't parse URL %s: %+v", urlText, err)
+				}
+
+				// Slow down reading if the crawler is busy
+				if crawler.Busy() {
+					time.Sleep(500 * time.Millisecond)
+				}
+
+				// Break the reading loop if the user signals exit while we're reading still
+				if signaled.Load().(bool) {
+					break
+				}
+
+				err = crawler.Enqueue(crawl.Outlink{URL: parsedURL, Tag: crawl.TagPrimary}, 0)
+				if err != nil {
+					log.Fatalf("Couldn't enqueue URL %s: %+v", parsedURL, err)
+				}
+			}
+
+			if err := scanner.Err(); err != nil {
+				log.Fatal(err)
+			}
+		}()
+	}
 
 	crawler.Run(*concurrency)
 	crawler.Close()

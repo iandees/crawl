@@ -343,6 +343,12 @@ func (c *Crawler) Close() {
 	c.db.Close() // nolint
 }
 
+// Busy returns true if the crawler has items in it's queue.
+func (c *Crawler) Busy() bool {
+	activeQueueCount := atomic.LoadInt32(&c.queue.numActive)
+	return activeQueueCount > 0
+}
+
 // FollowRedirects returns a Handler that follows HTTP redirects
 // and adds them to the queue for crawling. It will call the wrapped
 // handler on all requests regardless.
